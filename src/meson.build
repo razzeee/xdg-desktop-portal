@@ -90,6 +90,7 @@ xdg_desktop_portal_sources = files(
   'dynamic-launcher.c',
   'email.c',
   'file-chooser.c',
+  'flatpak.c',
   'flatpak-instance.c',
   'gamemode.c',
   'global-shortcuts.c',

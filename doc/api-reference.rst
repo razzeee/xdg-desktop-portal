@@ -44,6 +44,8 @@ All apps have access to the portals below:
    doc-org.freedesktop.portal.Email.rst
    doc-org.freedesktop.portal.FileChooser.rst
    doc-org.freedesktop.portal.FileTransfer.rst
+   doc-org.freedesktop.portal.FlatpakInstaller.rst
+   doc-org.freedesktop.portal.FlatpakInstaller.InstallMonitor.rst
    doc-org.freedesktop.portal.GameMode.rst
    doc-org.freedesktop.portal.GlobalShortcuts.rst
    doc-org.freedesktop.portal.Inhibit.rst

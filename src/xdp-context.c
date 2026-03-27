@@ -35,6 +35,7 @@
 #include "dynamic-launcher.h"
 #include "email.h"
 #include "file-chooser.h"
+#include "flatpak.h"
 #include "gamemode.h"
 #include "global-shortcuts.h"
 #include "inhibit.h"
@@ -392,6 +393,7 @@ xdp_context_register (XdpContext       *context,
   init_realtime (context);
   init_settings (context);
   init_file_chooser (context);
+  init_flatpak (context);
   init_open_uri (context);
   init_print (context);
   init_notification (context);

@@ -1,0 +1,181 @@
+<?xml version="1.0"?>
+<!--
+ Copyright (C) 2024 Red Hat, Inc.
+
+ SPDX-License-Identifier: LGPL-2.1-or-later
+
+ This library is free software; you can redistribute it and/or
+ modify it under the terms of the GNU Lesser General Public
+ License as published by the Free Software Foundation; either
+ version 2.1 of the License, or (at your option) any later version.
+
+ This library is distributed in the hope that it will be useful,
+ but WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ Lesser General Public License for more details.
+
+ You should have received a copy of the GNU Lesser General Public
+ License along with this library. If not, see <http://www.gnu.org/licenses/>.
+-->
+
+<node name="/" xmlns:doc="http://www.freedesktop.org/dbus/1.0/doc.dtd">
+  <!--
+      org.freedesktop.portal.FlatpakInstaller:
+      @short_description: Flatpak installer portal
+
+      This interface lets sandboxed applications interact with the
+      Flatpak system on the host to install, uninstall, and update extensions.
+
+      This documentation describes version 1 of this interface.
+  -->
+  <interface name="org.freedesktop.portal.FlatpakInstaller">
+    <!--
+        InstallExtensions:
+        @extensions: List of extension IDs to install
+        @options: Vardict with optional further information
+        @handle: Object path for the :ref:`org.freedesktop.portal.FlatpakInstaller.InstallMonitor` object
+
+        Requests the installation of one or more extensions for the calling
+        application. The extension IDs must start with the application ID
+        of the caller.
+
+        Supported keys in the @options vardict include:
+
+        * ``handle_token`` (``s``)
+
+          A string that will be used as the last element of the @handle.
+          Must be a valid object path element.
+    -->
+    <method name="InstallExtensions">
+      <arg type="as" name="extensions" direction="in"/>
+      <arg type="a{sv}" name="options" direction="in"/>
+      <arg type="o" name="handle" direction="out"/>
+    </method>
+
+    <!--
+        UninstallExtensions:
+        @extensions: List of extension IDs to uninstall
+        @options: Vardict with optional further information
+        @handle: Object path for the :ref:`org.freedesktop.portal.FlatpakInstaller.InstallMonitor` object
+
+        Requests the uninstallation of one or more extensions for the calling
+        application. The extension IDs must start with the application ID
+        of the caller.
+
+        Supported keys in the @options vardict include:
+
+        * ``handle_token`` (``s``)
+
+          A string that will be used as the last element of the @handle.
+          Must be a valid object path element.
+    -->
+    <method name="UninstallExtensions">
+      <arg type="as" name="extensions" direction="in"/>
+      <arg type="a{sv}" name="options" direction="in"/>
+      <arg type="o" name="handle" direction="out"/>
+    </method>
+
+    <!--
+        UpdateExtensions:
+        @extensions: List of extension IDs to update
+        @options: Vardict with optional further information
+        @handle: Object path for the :ref:`org.freedesktop.portal.FlatpakInstaller.InstallMonitor` object
+
+        Requests the update of one or more extensions for the calling
+        application. The extension IDs must start with the application ID
+        of the caller.
+
+        Supported keys in the @options vardict include:
+
+        * ``handle_token`` (``s``)
+
+          A string that will be used as the last element of the @handle.
+          Must be a valid object path element.
+    -->
+    <method name="UpdateExtensions">
+      <arg type="as" name="extensions" direction="in"/>
+      <arg type="a{sv}" name="options" direction="in"/>
+      <arg type="o" name="handle" direction="out"/>
+    </method>
+
+    <!--
+        ListExtensions:
+        @options: Vardict with optional further information
+        @extensions: List of installed extensions with basic info
+
+        Returns a list of installed extensions for the calling application.
+        The extension IDs will start with the application ID of the caller.
+
+        The @extensions array consists of vardicts with the following keys:
+
+        * ``id`` (``s``)
+
+          The extension ID.
+
+        * ``name`` (``s``)
+
+          The name of the extension.
+
+        * ``version`` (``s``)
+
+          The version of the extension.
+
+        * ``summary`` (``s``)
+
+          A brief summary of the extension.
+    -->
+    <method name="ListExtensions">
+      <arg type="a{sv}" name="options" direction="in"/>
+      <arg type="aa{sv}" name="extensions" direction="out"/>
+    </method>
+
+    <property name="version" type="u" access="read"/>
+  </interface>
+
+  <!--
+      org.freedesktop.portal.FlatpakInstaller.InstallMonitor:
+      @short_description: Monitor for extension installation
+
+      This interface is used to monitor the progress of an extension
+      installation requested via :ref:`org.freedesktop.portal.FlatpakInstaller.InstallExtensions`.
+  -->
+  <interface name="org.freedesktop.portal.FlatpakInstaller.InstallMonitor">
+    <!--
+        Close:
+
+        Ends the installation and closes the monitor.
+    -->
+    <method name="Close"/>
+
+    <!--
+        Progress:
+        @info: Vardict with progress information
+
+        Emitted to indicate the progress of the installation.
+
+        Supported keys in the @info vardict include:
+
+        * ``status`` (``u``)
+
+          The overall status of the installation.
+          0: Running
+          1: Done
+          2: Failed
+
+        * ``progress`` (``u``)
+
+          The progress of the current operation, as a number between 0 and 100.
+
+        * ``error`` (``s``)
+
+          The error name, sent when status is Failed.
+
+        * ``error_message`` (``s``)
+
+          The error message, sent when status is Failed.
+    -->
+    <signal name="Progress">
+      <arg type="a{sv}" name="info" direction="out"/>
+    </signal>
+  </interface>
+</node>

@@ -90,6 +90,7 @@ pytest_files = [
   'test_dynamiclauncher.py',
   'test_email.py',
   'test_filechooser.py',
+  'test_flatpak.py',
   'test_globalshortcuts.py',
   'test_inhibit.py',
   'test_inputcapture.py',
