@@ -29,7 +29,6 @@
 #include "xdp-context.h"
 #include "xdp-dbus.h"
 #include "xdp-utils.h"
-#include "flatpak-instance.h"
 
 #include "flatpak.h"
 
@@ -38,12 +37,12 @@ typedef struct _FlatpakPortalClass FlatpakPortalClass;
 
 struct _FlatpakPortal
 {
-  XdpDbusFlatpakSkeleton parent_instance;
+  XdpDbusFlatpakInstallerSkeleton parent_instance;
 };
 
 struct _FlatpakPortalClass
 {
-  XdpDbusFlatpakSkeletonClass parent_class;
+  XdpDbusFlatpakInstallerSkeletonClass parent_class;
 };
 
 typedef struct _InstallMonitor InstallMonitor;
@@ -51,7 +50,7 @@ typedef struct _InstallMonitorClass InstallMonitorClass;
 
 struct _InstallMonitor
 {
-  XdpDbusFlatpakInstallMonitorSkeleton parent_instance;
+  XdpDbusFlatpakInstallerInstallMonitorSkeleton parent_instance;
   XdpContext *context;
   char *id;
   GCancellable *cancellable;
@@ -59,23 +58,23 @@ struct _InstallMonitor
 
 struct _InstallMonitorClass
 {
-  XdpDbusFlatpakInstallMonitorSkeletonClass parent_class;
+  XdpDbusFlatpakInstallerInstallMonitorSkeletonClass parent_class;
 };
 
 GType flatpak_portal_get_type (void) G_GNUC_CONST;
-static void flatpak_portal_iface_init (XdpDbusFlatpakIface *iface);
+static void flatpak_portal_iface_init (XdpDbusFlatpakInstallerIface *iface);
 
 G_DEFINE_TYPE_WITH_CODE (FlatpakPortal, flatpak_portal,
-                         XDP_DBUS_TYPE_FLATPAK_SKELETON,
-                         G_IMPLEMENT_INTERFACE (XDP_DBUS_TYPE_FLATPAK,
+                         XDP_DBUS_TYPE_FLATPAK_INSTALLER_SKELETON,
+                         G_IMPLEMENT_INTERFACE (XDP_DBUS_TYPE_FLATPAK_INSTALLER,
                                                 flatpak_portal_iface_init));
 
 GType install_monitor_get_type (void) G_GNUC_CONST;
-static void install_monitor_iface_init (XdpDbusFlatpakInstallMonitorIface *iface);
+static void install_monitor_iface_init (XdpDbusFlatpakInstallerInstallMonitorIface *iface);
 
 G_DEFINE_TYPE_WITH_CODE (InstallMonitor, install_monitor,
-                         XDP_DBUS_TYPE_FLATPAK_INSTALL_MONITOR_SKELETON,
-                         G_IMPLEMENT_INTERFACE (XDP_DBUS_TYPE_FLATPAK_INSTALL_MONITOR,
+                         XDP_DBUS_TYPE_FLATPAK_INSTALLER_INSTALL_MONITOR_SKELETON,
+                         G_IMPLEMENT_INTERFACE (XDP_DBUS_TYPE_FLATPAK_INSTALLER_INSTALL_MONITOR,
                                                 install_monitor_iface_init));
 
 static void
@@ -105,7 +104,7 @@ install_monitor_class_init (InstallMonitorClass *klass)
 }
 
 static gboolean
-handle_close (XdpDbusFlatpakInstallMonitor *object,
+handle_close (XdpDbusFlatpakInstallerInstallMonitor *object,
               GDBusMethodInvocation        *invocation)
 {
   InstallMonitor *monitor = (InstallMonitor *)object;
@@ -116,13 +115,13 @@ handle_close (XdpDbusFlatpakInstallMonitor *object,
   xdp_context_unclaim_object_path (monitor->context, monitor->id);
   g_dbus_interface_skeleton_unexport (G_DBUS_INTERFACE_SKELETON (monitor));
 
-  xdp_dbus_flatpak_install_monitor_complete_close (object, invocation);
+  xdp_dbus_flatpak_installer_install_monitor_complete_close (object, invocation);
 
   return G_DBUS_METHOD_INVOCATION_HANDLED;
 }
 
 static void
-install_monitor_iface_init (XdpDbusFlatpakInstallMonitorIface *iface)
+install_monitor_iface_init (XdpDbusFlatpakInstallerInstallMonitorIface *iface)
 {
   iface->handle_close = handle_close;
 }
@@ -143,7 +142,7 @@ install_monitor_new (XdpContext *context,
 static void
 flatpak_portal_init (FlatpakPortal *portal)
 {
-  xdp_dbus_flatpak_set_version (XDP_DBUS_FLATPAK (portal), 1);
+  xdp_dbus_flatpak_installer_set_version (XDP_DBUS_FLATPAK_INSTALLER (portal), 1);
 }
 
 static void
@@ -167,7 +166,7 @@ emit_progress (InstallMonitor *monitor,
   if (error_message)
     g_variant_builder_add (&builder, "{sv}", "error_message", g_variant_new_string (error_message));
 
-  xdp_dbus_flatpak_install_monitor_emit_progress (XDP_DBUS_FLATPAK_INSTALL_MONITOR (monitor),
+  xdp_dbus_flatpak_installer_install_monitor_emit_progress (XDP_DBUS_FLATPAK_INSTALLER_INSTALL_MONITOR (monitor),
                                                   g_variant_builder_end (&builder));
 }
 
@@ -185,7 +184,7 @@ install_finished_cb (GObject      *source,
         return;
 
       g_warning ("Flatpak install failed: %s", error->message);
-      emit_progress (monitor, 2, 0, "org.freedesktop.portal.Flatpak.Error.Failed", error->message);
+      emit_progress (monitor, 2, 0, "org.freedesktop.portal.FlatpakInstaller.Error.Failed", error->message);
     }
   else
     {
@@ -195,7 +194,7 @@ install_finished_cb (GObject      *source,
 }
 
 static gboolean
-handle_install_extensions (XdpDbusFlatpak        *object,
+handle_install_extensions (XdpDbusFlatpakInstaller        *object,
                            GDBusMethodInvocation *invocation,
                            const char * const    *arg_extensions,
                            GVariant              *arg_options)
@@ -259,7 +258,7 @@ handle_install_extensions (XdpDbusFlatpak        *object,
       if (sender[j] == '.')
         sender[j] = '_';
 
-    handle = g_strdup_printf ("/org/freedesktop/portal/Flatpak/install_monitor/%s/%s", sender, handle_token);
+    handle = g_strdup_printf ("/org/freedesktop/portal/FlatpakInstaller/install_monitor/%s/%s", sender, handle_token);
   }
 
   if (!xdp_context_claim_object_path (context, handle))
@@ -304,7 +303,7 @@ handle_install_extensions (XdpDbusFlatpak        *object,
   if (!subprocess)
     {
       g_warning ("Failed to start flatpak install: %s", error->message);
-      emit_progress (monitor, 2, 0, "org.freedesktop.portal.Flatpak.Error.Failed", error->message);
+      emit_progress (monitor, 2, 0, "org.freedesktop.portal.FlatpakInstaller.Error.Failed", error->message);
     }
   else
     {
@@ -315,13 +314,13 @@ handle_install_extensions (XdpDbusFlatpak        *object,
                                g_object_ref (monitor));
     }
 
-  xdp_dbus_flatpak_complete_install_extensions (object, invocation, handle);
+  xdp_dbus_flatpak_installer_complete_install_extensions (object, invocation, handle);
 
   return G_DBUS_METHOD_INVOCATION_HANDLED;
 }
 
 static void
-flatpak_portal_iface_init (XdpDbusFlatpakIface *iface)
+flatpak_portal_iface_init (XdpDbusFlatpakInstallerIface *iface)
 {
   iface->handle_install_extensions = handle_install_extensions;
 }

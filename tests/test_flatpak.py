@@ -7,8 +7,6 @@ import tests.xdp_utils as xdp
 import dbus
 import pytest
 from gi.repository import GLib
-import os
-from pathlib import Path
 
 
 @pytest.fixture
@@ -42,13 +40,13 @@ exit 1
 
 class TestFlatpak:
     def test_version(self, portals, dbus_con):
-        xdp.check_version(dbus_con, "Flatpak", 1)
+        xdp.check_version(dbus_con, "FlatpakInstaller", 1)
 
     def test_install_extensions(self, portals, dbus_con, xdp_app_info):
         if xdp_app_info.kind != xdp.AppInfoKind.FLATPAK:
             pytest.skip("This test requires a Flatpak app info")
 
-        flatpak_intf = xdp.get_portal_iface(dbus_con, "Flatpak")
+        flatpak_intf = xdp.get_portal_iface(dbus_con, "FlatpakInstaller")
         app_id = xdp_app_info.app_id
         extensions = [f"{app_id}.Extension1", f"{app_id}.Extension2"]
         options = {"handle_token": "test_token"}
@@ -65,12 +63,12 @@ class TestFlatpak:
         handle = flatpak_intf.InstallExtensions(extensions, options)
         assert (
             handle
-            == f"/org/freedesktop/portal/Flatpak/install_monitor/{dbus_con.get_unique_name().lstrip(':').replace('.', '_')}/test_token"
+            == f"/org/freedesktop/portal/FlatpakInstaller/install_monitor/{dbus_con.get_unique_name().lstrip(':').replace('.', '_')}/test_token"
         )
 
         monitor_obj = dbus_con.get_object("org.freedesktop.portal.Desktop", handle)
         monitor_intf = dbus.Interface(
-            monitor_obj, "org.freedesktop.portal.Flatpak.InstallMonitor"
+            monitor_obj, "org.freedesktop.portal.FlatpakInstaller.InstallMonitor"
         )
         monitor_intf.connect_to_signal("Progress", on_progress)
 
@@ -90,10 +88,10 @@ class TestFlatpak:
         if xdp_app_info.kind != xdp.AppInfoKind.FLATPAK:
             pytest.skip("This test requires a Flatpak app info")
 
-        flatpak_intf = xdp.get_portal_iface(dbus_con, "Flatpak")
+        flatpak_intf = xdp.get_portal_iface(dbus_con, "FlatpakInstaller")
         # Matches prefix but not followed by dot
         extensions = [f"{xdp_app_info.app_id}Suffix"]
-        options = {}
+        options: dict[str, str] = {}
 
         with pytest.raises(dbus.exceptions.DBusException) as excinfo:
             flatpak_intf.InstallExtensions(extensions, options)
@@ -115,7 +113,7 @@ class TestFlatpak:
 
     def test_install_extensions_host_forbidden(self, portals, dbus_con):
         # The xdp_app_info fixture will iterate, but we can also use it as host
-        flatpak_intf = xdp.get_portal_iface(dbus_con, "Flatpak")
+        flatpak_intf = xdp.get_portal_iface(dbus_con, "FlatpakInstaller")
 
         with pytest.raises(dbus.exceptions.DBusException) as excinfo:
             flatpak_intf.InstallExtensions(["some.extension"], {})

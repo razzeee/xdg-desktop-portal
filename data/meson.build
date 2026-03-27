@@ -13,7 +13,7 @@ portal_sources = files(
   'org.freedesktop.portal.DynamicLauncher.xml',
   'org.freedesktop.portal.Email.xml',
   'org.freedesktop.portal.FileChooser.xml',
-  'org.freedesktop.portal.Flatpak.xml',
+  'org.freedesktop.portal.FlatpakInstaller.xml',
   'org.freedesktop.portal.FileTransfer.xml',
   'org.freedesktop.portal.GameMode.xml',
   'org.freedesktop.portal.GlobalShortcuts.xml',

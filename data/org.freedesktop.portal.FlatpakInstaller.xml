@@ -20,20 +20,20 @@
 
 <node name="/" xmlns:doc="http://www.freedesktop.org/dbus/1.0/doc.dtd">
   <!--
-      org.freedesktop.portal.Flatpak:
-      @short_description: Flatpak portal
+      org.freedesktop.portal.FlatpakInstaller:
+      @short_description: Flatpak installer portal
 
       This interface lets sandboxed applications interact with the
-      Flatpak system on the host.
+      Flatpak system on the host to install extensions.
 
       This documentation describes version 1 of this interface.
   -->
-  <interface name="org.freedesktop.portal.Flatpak">
+  <interface name="org.freedesktop.portal.FlatpakInstaller">
     <!--
         InstallExtensions:
         @extensions: List of extension IDs to install
         @options: Vardict with optional further information
-        @handle: Object path for the :ref:`org.freedesktop.portal.Flatpak.InstallMonitor` object
+        @handle: Object path for the :ref:`org.freedesktop.portal.FlatpakInstaller.InstallMonitor` object
 
         Requests the installation of one or more extensions for the calling
         application. The extension IDs must start with the application ID
@@ -56,13 +56,13 @@
   </interface>
 
   <!--
-      org.freedesktop.portal.Flatpak.InstallMonitor:
+      org.freedesktop.portal.FlatpakInstaller.InstallMonitor:
       @short_description: Monitor for extension installation
 
       This interface is used to monitor the progress of an extension
-      installation requested via :ref:`org.freedesktop.portal.Flatpak.InstallExtensions`.
+      installation requested via :ref:`org.freedesktop.portal.FlatpakInstaller.InstallExtensions`.
   -->
-  <interface name="org.freedesktop.portal.Flatpak.InstallMonitor">
+  <interface name="org.freedesktop.portal.FlatpakInstaller.InstallMonitor">
     <!--
         Close:
 
