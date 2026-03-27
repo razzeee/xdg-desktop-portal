@@ -118,4 +118,6 @@ class TestFlatpak:
         with pytest.raises(dbus.exceptions.DBusException) as excinfo:
             flatpak_intf.InstallExtensions(["some.extension"], {})
 
-        assert excinfo.value.get_dbus_name() == "org.freedesktop.portal.Error.NotAllowed"
+        assert (
+            excinfo.value.get_dbus_name() == "org.freedesktop.portal.Error.NotAllowed"
+        )
