@@ -2,6 +2,7 @@
 src/background.c
 src/camera.c
 src/dynamic-launcher.c
+src/flatpak.c
 src/location.c
 src/screenshot.c
 src/settings.c
