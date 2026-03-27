@@ -24,6 +24,7 @@
 
 #include <gio/gio.h>
 #include <glib/gi18n.h>
+#include <string.h>
 
 #include "xdp-app-info.h"
 #include "xdp-context.h"
@@ -38,6 +39,7 @@ typedef struct _FlatpakPortalClass FlatpakPortalClass;
 struct _FlatpakPortal
 {
   XdpDbusFlatpakInstallerSkeleton parent_instance;
+  XdpContext *context;
 };
 
 struct _FlatpakPortalClass
@@ -53,6 +55,7 @@ struct _InstallMonitor
   XdpDbusFlatpakInstallerInstallMonitorSkeleton parent_instance;
   XdpContext *context;
   char *id;
+  char *sender;
   GCancellable *cancellable;
 };
 
@@ -84,6 +87,20 @@ install_monitor_init (InstallMonitor *monitor)
 }
 
 static void
+install_monitor_close (InstallMonitor *monitor)
+{
+  if (!g_dbus_interface_skeleton_get_object_path (G_DBUS_INTERFACE_SKELETON (monitor)))
+    return;
+
+  g_debug ("Closing install monitor %s", monitor->id);
+
+  g_cancellable_cancel (monitor->cancellable);
+
+  xdp_context_unclaim_object_path (monitor->context, monitor->id);
+  g_dbus_interface_skeleton_unexport (G_DBUS_INTERFACE_SKELETON (monitor));
+}
+
+static void
 install_monitor_finalize (GObject *object)
 {
   InstallMonitor *monitor = (InstallMonitor *)object;
@@ -91,6 +108,7 @@ install_monitor_finalize (GObject *object)
   g_cancellable_cancel (monitor->cancellable);
   g_clear_object (&monitor->cancellable);
   g_free (monitor->id);
+  g_free (monitor->sender);
 
   G_OBJECT_CLASS (install_monitor_parent_class)->finalize (object);
 }
@@ -109,11 +127,7 @@ handle_close (XdpDbusFlatpakInstallerInstallMonitor *object,
 {
   InstallMonitor *monitor = (InstallMonitor *)object;
 
-  g_debug ("Closing install monitor %s", monitor->id);
-
-  g_cancellable_cancel (monitor->cancellable);
-  xdp_context_unclaim_object_path (monitor->context, monitor->id);
-  g_dbus_interface_skeleton_unexport (G_DBUS_INTERFACE_SKELETON (monitor));
+  install_monitor_close (monitor);
 
   xdp_dbus_flatpak_installer_install_monitor_complete_close (object, invocation);
 
@@ -126,15 +140,36 @@ install_monitor_iface_init (XdpDbusFlatpakInstallerInstallMonitorIface *iface)
   iface->handle_close = handle_close;
 }
 
+static void
+on_peer_disconnect (XdpContext *context,
+                    const char *name,
+                    gpointer    user_data)
+{
+  InstallMonitor *monitor = user_data;
+
+  if (g_strcmp0 (monitor->sender, name) == 0)
+    {
+      g_debug ("Peer %s disconnected, closing monitor %s", name, monitor->id);
+      install_monitor_close (monitor);
+    }
+}
+
 static InstallMonitor *
 install_monitor_new (XdpContext *context,
-                     const char *id)
+                     const char *id,
+                     const char *sender)
 {
   InstallMonitor *monitor;
 
   monitor = g_object_new (install_monitor_get_type (), NULL);
   monitor->context = context;
   monitor->id = g_strdup (id);
+  monitor->sender = g_strdup (sender);
+
+  g_signal_connect_object (context, "peer-disconnect",
+                           G_CALLBACK (on_peer_disconnect),
+                           monitor,
+                           G_CONNECT_DEFAULT);
 
   return monitor;
 }
@@ -146,8 +181,16 @@ flatpak_portal_init (FlatpakPortal *portal)
 }
 
 static void
+flatpak_portal_finalize (GObject *object)
+{
+  G_OBJECT_CLASS (flatpak_portal_parent_class)->finalize (object);
+}
+
+static void
 flatpak_portal_class_init (FlatpakPortalClass *klass)
 {
+  GObjectClass *object_class = G_OBJECT_CLASS (klass);
+  object_class->finalize = flatpak_portal_finalize;
 }
 
 static void
@@ -158,6 +201,10 @@ emit_progress (InstallMonitor *monitor,
                const char     *error_message)
 {
   GVariantBuilder builder;
+
+  if (!g_dbus_interface_skeleton_get_object_path (G_DBUS_INTERFACE_SKELETON (monitor)))
+    return;
+
   g_variant_builder_init (&builder, G_VARIANT_TYPE_VARDICT);
   g_variant_builder_add (&builder, "{sv}", "status", g_variant_new_uint32 (status));
   g_variant_builder_add (&builder, "{sv}", "progress", g_variant_new_uint32 (progress));
@@ -166,14 +213,14 @@ emit_progress (InstallMonitor *monitor,
   if (error_message)
     g_variant_builder_add (&builder, "{sv}", "error_message", g_variant_new_string (error_message));
 
-  xdp_dbus_flatpak_installer_install_monitor_emit_progress (XDP_DBUS_FLATPAK_INSTALLER_INSTALL_MONITOR (monitor),
+  xdp_dbus_flatpak_installer_install_monitor_emit_progress (XDP_DBUS_FLATPAK_INSTALL_MONITOR (monitor),
                                                   g_variant_builder_end (&builder));
 }
 
 static void
-install_finished_cb (GObject      *source,
-                     GAsyncResult *result,
-                     gpointer      user_data)
+operation_finished_cb (GObject      *source,
+                       GAsyncResult *result,
+                       gpointer      user_data)
 {
   g_autoptr(InstallMonitor) monitor = user_data;
   g_autoptr(GError) error = NULL;
@@ -183,42 +230,23 @@ install_finished_cb (GObject      *source,
       if (g_error_matches (error, G_IO_ERROR, G_IO_ERROR_CANCELLED))
         return;
 
-      g_warning ("Flatpak install failed: %s", error->message);
+      g_warning ("Flatpak operation failed: %s", error->message);
       emit_progress (monitor, 2, 0, "org.freedesktop.portal.FlatpakInstaller.Error.Failed", error->message);
     }
   else
     {
-      g_debug ("Flatpak install finished successfully");
+      g_debug ("Flatpak operation finished successfully");
       emit_progress (monitor, 1, 100, NULL, NULL);
     }
 }
 
 static gboolean
-handle_install_extensions (XdpDbusFlatpakInstaller        *object,
-                           GDBusMethodInvocation *invocation,
-                           const char * const    *arg_extensions,
-                           GVariant              *arg_options)
+validate_extensions (GDBusMethodInvocation *invocation,
+                     const char * app_id,
+                     const char * const * arg_extensions)
 {
-  XdpContext *context = g_object_get_data (G_OBJECT (object), "xdp-context");
-  XdpAppInfo *app_info = xdp_invocation_get_app_info (invocation);
-  const char *app_id = xdp_app_info_get_id (app_info);
-  g_autoptr(GError) error = NULL;
-  const char *handle_token = NULL;
-  g_autofree char *handle = NULL;
-  g_autoptr(InstallMonitor) monitor = NULL;
-  g_autoptr(GSubprocess) subprocess = NULL;
-  g_autoptr(GPtrArray) args = NULL;
-  int i;
   size_t app_id_len = strlen (app_id);
-
-  if (xdp_app_info_is_host (app_info))
-    {
-      g_dbus_method_invocation_return_error (invocation,
-                                             XDG_DESKTOP_PORTAL_ERROR,
-                                             XDG_DESKTOP_PORTAL_ERROR_NOT_ALLOWED,
-                                             _("Only sandboxed applications can install extensions"));
-      return G_DBUS_METHOD_INVOCATION_HANDLED;
-    }
+  int i;
 
   for (i = 0; arg_extensions[i] != NULL; i++)
     {
@@ -230,9 +258,43 @@ handle_install_extensions (XdpDbusFlatpakInstaller        *object,
                                                  XDG_DESKTOP_PORTAL_ERROR_INVALID_ARGUMENT,
                                                  _("Extension ID %s does not start with app ID %s."),
                                                  ext, app_id);
-          return G_DBUS_METHOD_INVOCATION_HANDLED;
+          return FALSE;
         }
     }
+  return TRUE;
+}
+
+static gboolean
+start_flatpak_operation (XdpDbusFlatpakInstaller *object,
+                         GDBusMethodInvocation *invocation,
+                         const char * const * arg_extensions,
+                         GVariant *arg_options,
+                         const char * command)
+{
+  FlatpakPortal *portal = (FlatpakPortal *)object;
+  XdpContext *context = portal->context;
+  XdpAppInfo *app_info = xdp_invocation_get_app_info (invocation);
+  const char *app_id = xdp_app_info_get_id (app_info);
+  const char *sender = g_dbus_method_invocation_get_sender (invocation);
+  g_autoptr(GError) error = NULL;
+  const char *handle_token = NULL;
+  g_autofree char *handle = NULL;
+  g_autoptr(InstallMonitor) monitor = NULL;
+  g_autoptr(GSubprocess) subprocess = NULL;
+  g_autoptr(GPtrArray) args = NULL;
+  int i;
+
+  if (xdp_app_info_is_host (app_info))
+    {
+      g_dbus_method_invocation_return_error (invocation,
+                                             XDG_DESKTOP_PORTAL_ERROR,
+                                             XDG_DESKTOP_PORTAL_ERROR_NOT_ALLOWED,
+                                             _("Only sandboxed applications can perform this operation"));
+      return TRUE;
+    }
+
+  if (!validate_extensions (invocation, app_id, arg_extensions))
+    return TRUE;
 
   g_variant_lookup (arg_options, "handle_token", "&s", &handle_token);
   if (handle_token)
@@ -243,7 +305,7 @@ handle_install_extensions (XdpDbusFlatpakInstaller        *object,
                                                  XDG_DESKTOP_PORTAL_ERROR,
                                                  XDG_DESKTOP_PORTAL_ERROR_INVALID_ARGUMENT,
                                                  _("Invalid handle token: %s"), handle_token);
-          return G_DBUS_METHOD_INVOCATION_HANDLED;
+          return TRUE;
         }
     }
   else
@@ -252,13 +314,13 @@ handle_install_extensions (XdpDbusFlatpakInstaller        *object,
     }
 
   {
-    g_autofree char *sender = g_strdup (g_dbus_method_invocation_get_sender (invocation) + 1);
+    g_autofree char *sender_stripped = g_strdup (sender + 1);
     int j;
-    for (j = 0; sender[j] != '\0'; j++)
-      if (sender[j] == '.')
-        sender[j] = '_';
+    for (j = 0; sender_stripped[j] != '\0'; j++)
+      if (sender_stripped[j] == '.')
+        sender_stripped[j] = '_';
 
-    handle = g_strdup_printf ("/org/freedesktop/portal/FlatpakInstaller/install_monitor/%s/%s", sender, handle_token);
+    handle = g_strdup_printf ("/org/freedesktop/portal/FlatpakInstaller/install_monitor/%s/%s", sender_stripped, handle_token);
   }
 
   if (!xdp_context_claim_object_path (context, handle))
@@ -267,10 +329,10 @@ handle_install_extensions (XdpDbusFlatpakInstaller        *object,
                                              XDG_DESKTOP_PORTAL_ERROR,
                                              XDG_DESKTOP_PORTAL_ERROR_EXISTS,
                                              _("Handle already in use"));
-      return G_DBUS_METHOD_INVOCATION_HANDLED;
+      return TRUE;
     }
 
-  monitor = install_monitor_new (context, handle);
+  monitor = install_monitor_new (context, handle, sender);
 
   if (!g_dbus_interface_skeleton_export (G_DBUS_INTERFACE_SKELETON (monitor),
                                          xdp_context_get_connection (context),
@@ -279,17 +341,18 @@ handle_install_extensions (XdpDbusFlatpakInstaller        *object,
     {
       xdp_context_unclaim_object_path (context, handle);
       g_dbus_method_invocation_return_gerror (invocation, error);
-      return G_DBUS_METHOD_INVOCATION_HANDLED;
+      return TRUE;
     }
 
-  g_debug ("Installing extensions for %s: %s", app_id, handle);
+  g_debug ("Performing %s extensions for %s: %s", command, app_id, handle);
 
   args = g_ptr_array_new_with_free_func (g_free);
   g_ptr_array_add (args, g_strdup ("flatpak"));
-  g_ptr_array_add (args, g_strdup ("install"));
+  g_ptr_array_add (args, g_strdup (command));
   g_ptr_array_add (args, g_strdup ("--user"));
   g_ptr_array_add (args, g_strdup ("--noninteractive"));
   g_ptr_array_add (args, g_strdup ("-y"));
+  g_ptr_array_add (args, g_strdup ("--"));
 
   for (i = 0; arg_extensions[i] != NULL; i++)
     g_ptr_array_add (args, g_strdup (arg_extensions[i]));
@@ -302,7 +365,7 @@ handle_install_extensions (XdpDbusFlatpakInstaller        *object,
 
   if (!subprocess)
     {
-      g_warning ("Failed to start flatpak install: %s", error->message);
+      g_warning ("Failed to start flatpak %s: %s", command, error->message);
       emit_progress (monitor, 2, 0, "org.freedesktop.portal.FlatpakInstaller.Error.Failed", error->message);
     }
   else
@@ -310,11 +373,144 @@ handle_install_extensions (XdpDbusFlatpakInstaller        *object,
       emit_progress (monitor, 0, 0, NULL, NULL);
       g_subprocess_wait_async (subprocess,
                                monitor->cancellable,
-                               install_finished_cb,
+                               operation_finished_cb,
                                g_object_ref (monitor));
     }
 
-  xdp_dbus_flatpak_installer_complete_install_extensions (object, invocation, handle);
+  if (strcmp (command, "install") == 0)
+    xdp_dbus_flatpak_installer_complete_install_extensions (object, invocation, handle);
+  else if (strcmp (command, "uninstall") == 0)
+    xdp_dbus_flatpak_installer_complete_uninstall_extensions (object, invocation, handle);
+  else if (strcmp (command, "update") == 0)
+    xdp_dbus_flatpak_installer_complete_update_extensions (object, invocation, handle);
+
+  return TRUE;
+}
+
+static gboolean
+handle_install_extensions (XdpDbusFlatpakInstaller        *object,
+                           GDBusMethodInvocation *invocation,
+                           const char * const    *arg_extensions,
+                           GVariant              *arg_options)
+{
+  return start_flatpak_operation (object, invocation, arg_extensions, arg_options, "install");
+}
+
+static gboolean
+handle_uninstall_extensions (XdpDbusFlatpakInstaller        *object,
+                             GDBusMethodInvocation *invocation,
+                             const char * const    *arg_extensions,
+                             GVariant              *arg_options)
+{
+  return start_flatpak_operation (object, invocation, arg_extensions, arg_options, "uninstall");
+}
+
+static gboolean
+handle_update_extensions (XdpDbusFlatpakInstaller        *object,
+                          GDBusMethodInvocation *invocation,
+                          const char * const    *arg_extensions,
+                          GVariant              *arg_options)
+{
+  return start_flatpak_operation (object, invocation, arg_extensions, arg_options, "update");
+}
+
+typedef struct {
+  XdpDbusFlatpakInstaller *object;
+  GDBusMethodInvocation *invocation;
+  char *app_id;
+} ListExtensionsData;
+
+static void
+list_extensions_data_free (ListExtensionsData *data)
+{
+  g_clear_object (&data->object);
+  g_free (data->app_id);
+  g_free (data);
+}
+
+static void
+list_extensions_finished_cb (GObject      *source,
+                             GAsyncResult *result,
+                             gpointer      user_data)
+{
+  ListExtensionsData *data = user_data;
+  g_autoptr(GSubprocess) subprocess = G_SUBPROCESS (source);
+  g_autoptr(GError) error = NULL;
+  g_autofree char *stdout_buf = NULL;
+  g_autofree char *stderr_buf = NULL;
+  g_auto(GVariantBuilder) builder = G_VARIANT_BUILDER_INIT (G_VARIANT_TYPE ("aa{sv}"));
+
+  if (!g_subprocess_communicate_utf8_finish (subprocess, result, &stdout_buf, &stderr_buf, &error))
+    {
+      g_dbus_method_invocation_return_gerror (data->invocation, error);
+      list_extensions_data_free (data);
+      return;
+    }
+
+  if (stdout_buf)
+    {
+      g_auto(GStrv) lines = g_strsplit (stdout_buf, "\n", -1);
+      int i;
+      size_t app_id_len = strlen (data->app_id);
+
+      for (i = 0; lines[i] != NULL; i++)
+        {
+          g_auto(GStrv) parts = g_strsplit (lines[i], "\t", 4);
+          if (g_strv_length (parts) >= 4)
+            {
+              const char *ext_id = parts[0];
+              if (g_str_has_prefix (ext_id, data->app_id) && ext_id[app_id_len] == '.')
+                {
+                  g_auto(GVariantBuilder) ext_builder = G_VARIANT_BUILDER_INIT (G_VARIANT_TYPE_VARDICT);
+                  g_variant_builder_add (&ext_builder, "{sv}", "id", g_variant_new_string (parts[0]));
+                  g_variant_builder_add (&ext_builder, "{sv}", "name", g_variant_new_string (parts[1]));
+                  g_variant_builder_add (&ext_builder, "{sv}", "version", g_variant_new_string (parts[2]));
+                  g_variant_builder_add (&ext_builder, "{sv}", "summary", g_variant_new_string (parts[3]));
+                  g_variant_builder_add (&builder, "a{sv}", &ext_builder);
+                }
+            }
+        }
+    }
+
+  xdp_dbus_flatpak_installer_complete_list_extensions (data->object, data->invocation, g_variant_builder_end (&builder));
+  list_extensions_data_free (data);
+}
+
+static gboolean
+handle_list_extensions (XdpDbusFlatpakInstaller        *object,
+                        GDBusMethodInvocation *invocation,
+                        GVariant              *arg_options)
+{
+  XdpAppInfo *app_info = xdp_invocation_get_app_info (invocation);
+  const char *app_id = xdp_app_info_get_id (app_info);
+  g_autoptr(GError) error = NULL;
+  g_autoptr(GSubprocess) subprocess = NULL;
+  ListExtensionsData *data;
+
+  if (xdp_app_info_is_host (app_info))
+    {
+      g_dbus_method_invocation_return_error (invocation,
+                                             XDG_DESKTOP_PORTAL_ERROR,
+                                             XDG_DESKTOP_PORTAL_ERROR_NOT_ALLOWED,
+                                             _("Only sandboxed applications can perform this operation"));
+      return G_DBUS_METHOD_INVOCATION_HANDLED;
+    }
+
+  subprocess = g_subprocess_new (G_SUBPROCESS_FLAGS_STDOUT_PIPE | G_SUBPROCESS_FLAGS_STDERR_PIPE,
+                                 &error,
+                                 "flatpak", "list", "--user", "--app", "--columns=application,name,version,summary", NULL);
+  if (!subprocess)
+    {
+      g_dbus_method_invocation_return_gerror (invocation, error);
+      return G_DBUS_METHOD_INVOCATION_HANDLED;
+    }
+
+  data = g_new0 (ListExtensionsData, 1);
+  data->object = g_object_ref (object);
+  data->invocation = invocation;
+  data->app_id = g_strdup (app_id);
+
+  g_subprocess_communicate_utf8_async (subprocess, NULL, NULL, list_extensions_finished_cb, data);
 
   return G_DBUS_METHOD_INVOCATION_HANDLED;
 }
@@ -323,6 +519,9 @@ static void
 flatpak_portal_iface_init (XdpDbusFlatpakInstallerIface *iface)
 {
   iface->handle_install_extensions = handle_install_extensions;
+  iface->handle_uninstall_extensions = handle_uninstall_extensions;
+  iface->handle_update_extensions = handle_update_extensions;
+  iface->handle_list_extensions = handle_list_extensions;
 }
 
 void
@@ -331,7 +530,7 @@ init_flatpak (XdpContext *context)
   g_autoptr(FlatpakPortal) portal = NULL;
 
   portal = g_object_new (flatpak_portal_get_type (), NULL);
-  g_object_set_data (G_OBJECT (portal), "xdp-context", context);
+  portal->context = context;
 
   xdp_context_take_and_export_portal (context,
                                       G_DBUS_INTERFACE_SKELETON (g_steal_pointer (&portal)),

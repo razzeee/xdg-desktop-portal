@@ -24,7 +24,7 @@
       @short_description: Flatpak installer portal
 
       This interface lets sandboxed applications interact with the
-      Flatpak system on the host to install extensions.
+      Flatpak system on the host to install, uninstall, and update extensions.
 
       This documentation describes version 1 of this interface.
   -->
@@ -50,6 +50,83 @@
       <arg type="as" name="extensions" direction="in"/>
       <arg type="a{sv}" name="options" direction="in"/>
       <arg type="o" name="handle" direction="out"/>
+    </method>
+
+    <!--
+        UninstallExtensions:
+        @extensions: List of extension IDs to uninstall
+        @options: Vardict with optional further information
+        @handle: Object path for the :ref:`org.freedesktop.portal.FlatpakInstaller.InstallMonitor` object
+
+        Requests the uninstallation of one or more extensions for the calling
+        application. The extension IDs must start with the application ID
+        of the caller.
+
+        Supported keys in the @options vardict include:
+
+        * ``handle_token`` (``s``)
+
+          A string that will be used as the last element of the @handle.
+          Must be a valid object path element.
+    -->
+    <method name="UninstallExtensions">
+      <arg type="as" name="extensions" direction="in"/>
+      <arg type="a{sv}" name="options" direction="in"/>
+      <arg type="o" name="handle" direction="out"/>
+    </method>
+
+    <!--
+        UpdateExtensions:
+        @extensions: List of extension IDs to update
+        @options: Vardict with optional further information
+        @handle: Object path for the :ref:`org.freedesktop.portal.FlatpakInstaller.InstallMonitor` object
+
+        Requests the update of one or more extensions for the calling
+        application. The extension IDs must start with the application ID
+        of the caller.
+
+        Supported keys in the @options vardict include:
+
+        * ``handle_token`` (``s``)
+
+          A string that will be used as the last element of the @handle.
+          Must be a valid object path element.
+    -->
+    <method name="UpdateExtensions">
+      <arg type="as" name="extensions" direction="in"/>
+      <arg type="a{sv}" name="options" direction="in"/>
+      <arg type="o" name="handle" direction="out"/>
+    </method>
+
+    <!--
+        ListExtensions:
+        @options: Vardict with optional further information
+        @extensions: List of installed extensions with basic info
+
+        Returns a list of installed extensions for the calling application.
+        The extension IDs will start with the application ID of the caller.
+
+        The @extensions array consists of vardicts with the following keys:
+
+        * ``id`` (``s``)
+
+          The extension ID.
+
+        * ``name`` (``s``)
+
+          The name of the extension.
+
+        * ``version`` (``s``)
+
+          The version of the extension.
+
+        * ``summary`` (``s``)
+
+          A brief summary of the extension.
+    -->
+    <method name="ListExtensions">
+      <arg type="a{sv}" name="options" direction="in"/>
+      <arg type="aa{sv}" name="extensions" direction="out"/>
     </method>
 
     <property name="version" type="u" access="read"/>
