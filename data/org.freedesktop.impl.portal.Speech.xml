@@ -1,0 +1,61 @@
+<?xml version="1.0"?>
+<!--
+  SPDX-License-Identifier: LGPL-2.1-or-later
+  SPDX-FileCopyrightText: Copyright © the xdg-desktop-portal contributors
+-->
+
+<node name="/" xmlns:doc="http://www.freedesktop.org/dbus/1.0/doc.dtd">
+  <!--
+      org.freedesktop.impl.portal.Speech:
+      @short_description: Local speech model backend interface
+  -->
+  <interface name="org.freedesktop.impl.portal.Speech">
+    <method name="GetUseCaseAvailability">
+      <arg type="s" name="app_id" direction="in"/>
+      <arg type="s" name="use_case" direction="in"/>
+      <arg type="(bss)" name="availability" direction="out"/>
+    </method>
+
+    <method name="CreateSession">
+      <arg type="s" name="app_id" direction="in"/>
+      <arg type="s" name="use_case" direction="in"/>
+      <arg type="s" name="instructions" direction="in"/>
+      <arg type="s" name="session_id" direction="out"/>
+    </method>
+
+    <method name="Prewarm">
+      <arg type="s" name="session_id" direction="in"/>
+      <arg type="s" name="prompt_prefix" direction="in"/>
+    </method>
+
+    <method name="Transcribe">
+      <arg type="s" name="session_id" direction="in"/>
+      <arg type="s" name="audio" direction="in"/>
+      <arg type="s" name="language_hint" direction="in"/>
+      <arg type="s" name="text" direction="out"/>
+    </method>
+
+    <!-- Stream payloads are emitted as TranscriptionReceived signals while this call is in progress. -->
+    <method name="StreamTranscribe">
+      <arg type="s" name="session_id" direction="in"/>
+      <arg type="s" name="audio" direction="in"/>
+      <arg type="s" name="language_hint" direction="in"/>
+    </method>
+
+    <method name="EndSession">
+      <arg type="s" name="session_id" direction="in"/>
+    </method>
+
+    <signal name="ModelLoading">
+      <arg type="s" name="message"/>
+    </signal>
+
+    <signal name="TranscriptionReceived">
+      <arg type="s" name="session_id"/>
+      <arg type="s" name="text"/>
+      <arg type="b" name="done"/>
+    </signal>
+
+    <property name="version" type="u" access="read"/>
+  </interface>
+</node>
