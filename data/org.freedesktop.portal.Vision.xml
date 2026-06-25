@@ -19,6 +19,17 @@
       <arg type="(bss)" name="availability" direction="out"/>
     </method>
 
+    <!--
+        CreateSession:
+        @use_case: ``vision.describe`` for image descriptions,
+          ``vision.ocr`` for text extraction, or ``vision.segment`` for object boxes
+        @instructions: Stable system instructions for this session
+        @options: Vardict with optional further information
+        @session_handle: Object path for the :ref:`org.freedesktop.portal.Session` object
+
+        The session @use_case selects which vision operation is permitted for
+        the session. Create separate sessions for different vision tasks.
+    -->
     <method name="CreateSession">
       <arg type="s" name="use_case" direction="in"/>
       <arg type="s" name="instructions" direction="in"/>
@@ -29,11 +40,17 @@
 
     <method name="Prewarm">
       <arg type="o" name="session_handle" direction="in"/>
-      <arg type="s" name="prompt_prefix" direction="in"/>
-      <annotation name="org.qtproject.QtDBus.QtTypeName.In2" value="QVariantMap"/>
+      <annotation name="org.qtproject.QtDBus.QtTypeName.In1" value="QVariantMap"/>
       <arg type="a{sv}" name="options" direction="in"/>
     </method>
 
+    <!--
+        Describe:
+        @session_handle: A ``vision.describe`` session handle returned by CreateSession
+        @image: Base64-encoded PNG or JPEG image bytes
+        @options: Vardict with optional further information
+        @text: Natural-language image description
+    -->
     <method name="Describe">
       <arg type="o" name="session_handle" direction="in"/>
       <arg type="s" name="image" direction="in"/>
@@ -42,6 +59,13 @@
       <arg type="s" name="text" direction="out"/>
     </method>
 
+    <!--
+        Ocr:
+        @session_handle: A ``vision.ocr`` session handle returned by CreateSession
+        @image: Base64-encoded PNG or JPEG image bytes
+        @options: Vardict with optional further information
+        @text: Text extracted from the image
+    -->
     <method name="Ocr">
       <arg type="o" name="session_handle" direction="in"/>
       <arg type="s" name="image" direction="in"/>
@@ -50,6 +74,16 @@
       <arg type="s" name="text" direction="out"/>
     </method>
 
+    <!--
+        Segment:
+        @session_handle: A ``vision.segment`` session handle returned by CreateSession
+        @image: Base64-encoded PNG or JPEG image bytes
+        @options: Vardict with optional further information
+        @segments: Detected objects as ``(label, confidence, x, y, width, height)``
+
+        Segment coordinates are normalized rectangles in the ``0.0..1.0``
+        range relative to the image dimensions.
+    -->
     <method name="Segment">
       <arg type="o" name="session_handle" direction="in"/>
       <arg type="s" name="image" direction="in"/>

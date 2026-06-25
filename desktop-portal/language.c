@@ -83,7 +83,25 @@ forward_guided_snapshot_received (XdpDbusImplLanguage *impl,
   xdp_dbus_language_emit_guided_snapshot_received (XDP_DBUS_LANGUAGE (forward->language),
                                                    forward->session_handle,
                                                    snapshot_json,
-                                                   done);
+                                                    done);
+}
+
+static void
+forward_guided_tool_calls_received (XdpDbusImplLanguage *impl,
+                                    const char          *session_id,
+                                    GVariant            *tool_calls,
+                                    gboolean             done,
+                                    gpointer             user_data)
+{
+  LanguageSignalForward *forward = user_data;
+
+  if (g_strcmp0 (session_id, forward->backend_session_id) != 0)
+    return;
+
+  xdp_dbus_language_emit_guided_tool_calls_received (XDP_DBUS_LANGUAGE (forward->language),
+                                                     forward->session_handle,
+                                                     tool_calls,
+                                                     done);
 }
 
 static gboolean
@@ -178,7 +196,6 @@ static gboolean
 handle_language_prewarm (XdpDbusLanguage      *object,
                          GDBusMethodInvocation *invocation,
                          const char            *arg_session_handle,
-                         const char            *arg_prompt_prefix,
                          GVariant              *arg_options)
 {
   Language *language = (Language *) object;
@@ -195,10 +212,9 @@ handle_language_prewarm (XdpDbusLanguage      *object,
   xdp_dbus_language_emit_model_loading (object, session->id, "starting model");
 
   if (!xdp_dbus_impl_language_call_prewarm_sync (language->impl,
-                                                model_session_get_backend_session_id (model_session),
-                                                arg_prompt_prefix,
-                                                NULL,
-                                                &error))
+                                                 model_session_get_backend_session_id (model_session),
+                                                 NULL,
+                                                 &error))
     {
       g_dbus_method_invocation_return_gerror (invocation, error);
       return G_DBUS_METHOD_INVOCATION_HANDLED;
@@ -405,12 +421,13 @@ handle_language_respond_guided (XdpDbusLanguage      *object,
 }
 
 static gboolean
-handle_language_stream_guided_response (XdpDbusLanguage      *object,
-                                        GDBusMethodInvocation *invocation,
-                                        const char            *arg_session_handle,
-                                        const char            *arg_prompt,
-                                        GVariant              *arg_fields,
-                                        GVariant              *arg_options)
+handle_language_stream_respond_guided (XdpDbusLanguage      *object,
+                                       GDBusMethodInvocation *invocation,
+                                       const char            *arg_session_handle,
+                                       const char            *arg_prompt,
+                                       GVariant              *arg_fields,
+                                       GVariant              *arg_tools,
+                                       GVariant              *arg_options)
 {
   Language *language = (Language *) object;
   g_autoptr(XdpSession) session = NULL;
@@ -418,7 +435,8 @@ handle_language_stream_guided_response (XdpDbusLanguage      *object,
   g_autoptr(GVariant) options = NULL;
   g_autoptr(GError) error = NULL;
   LanguageSignalForward forward;
-  gulong handler_id;
+  gulong snapshot_handler_id;
+  gulong tool_calls_handler_id;
 
   session = lookup_model_session (invocation, arg_session_handle, MODEL_SESSION_LANGUAGE);
   if (session == NULL)
@@ -438,26 +456,33 @@ handle_language_stream_guided_response (XdpDbusLanguage      *object,
   forward.language = language;
   forward.backend_session_id = model_session_get_backend_session_id (model_session);
   forward.session_handle = session->id;
-  handler_id = g_signal_connect (language->impl,
-                                 "guided-snapshot-received",
-                                 G_CALLBACK (forward_guided_snapshot_received),
-                                 &forward);
+  snapshot_handler_id = g_signal_connect (language->impl,
+                                          "guided-snapshot-received",
+                                          G_CALLBACK (forward_guided_snapshot_received),
+                                          &forward);
+  tool_calls_handler_id = g_signal_connect (language->impl,
+                                            "guided-tool-calls-received",
+                                            G_CALLBACK (forward_guided_tool_calls_received),
+                                            &forward);
 
-  if (!xdp_dbus_impl_language_call_stream_guided_response_sync (language->impl,
-                                                               model_session_get_backend_session_id (model_session),
-                                                               arg_prompt,
-                                                               arg_fields,
-                                                               options,
-                                                               NULL,
-                                                               &error))
+  if (!xdp_dbus_impl_language_call_stream_respond_guided_sync (language->impl,
+                                                              model_session_get_backend_session_id (model_session),
+                                                              arg_prompt,
+                                                              arg_fields,
+                                                              arg_tools,
+                                                              options,
+                                                              NULL,
+                                                              &error))
     {
-      g_signal_handler_disconnect (language->impl, handler_id);
+      g_signal_handler_disconnect (language->impl, snapshot_handler_id);
+      g_signal_handler_disconnect (language->impl, tool_calls_handler_id);
       g_dbus_method_invocation_return_gerror (invocation, error);
       return G_DBUS_METHOD_INVOCATION_HANDLED;
     }
 
-  g_signal_handler_disconnect (language->impl, handler_id);
-  xdp_dbus_language_complete_stream_guided_response (object, invocation);
+  g_signal_handler_disconnect (language->impl, snapshot_handler_id);
+  g_signal_handler_disconnect (language->impl, tool_calls_handler_id);
+  xdp_dbus_language_complete_stream_respond_guided (object, invocation);
   return G_DBUS_METHOD_INVOCATION_HANDLED;
 }
 
@@ -559,7 +584,7 @@ language_iface_init (XdpDbusLanguageIface *iface)
   iface->handle_predict_next = handle_language_predict_next;
   iface->handle_stream_response = handle_language_stream_response;
   iface->handle_respond_guided = handle_language_respond_guided;
-  iface->handle_stream_guided_response = handle_language_stream_guided_response;
+  iface->handle_stream_respond_guided = handle_language_stream_respond_guided;
   iface->handle_submit_tool_results_guided = handle_language_submit_tool_results_guided;
   iface->handle_embed = handle_language_embed;
 }

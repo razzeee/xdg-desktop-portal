@@ -25,7 +25,6 @@
 
     <method name="Prewarm">
       <arg type="s" name="session_id" direction="in"/>
-      <arg type="s" name="prompt_prefix" direction="in"/>
     </method>
 
     <method name="Respond">
@@ -60,10 +59,11 @@
     </method>
 
     <!-- Stream payloads are emitted as GuidedSnapshotReceived signals while this call is in progress. -->
-    <method name="StreamGuidedResponse">
+    <method name="StreamRespondGuided">
       <arg type="s" name="session_id" direction="in"/>
       <arg type="s" name="prompt" direction="in"/>
       <arg type="a(sssb)" name="fields" direction="in"/>
+      <arg type="a(sss)" name="tools" direction="in"/>
       <arg type="(xdsss)" name="options" direction="in"/>
     </method>
 
@@ -101,6 +101,12 @@
     <signal name="GuidedSnapshotReceived">
       <arg type="s" name="session_id"/>
       <arg type="s" name="snapshot_json"/>
+      <arg type="b" name="done"/>
+    </signal>
+
+    <signal name="GuidedToolCallsReceived">
+      <arg type="s" name="session_id"/>
+      <arg type="a(sss)" name="tool_calls"/>
       <arg type="b" name="done"/>
     </signal>
 

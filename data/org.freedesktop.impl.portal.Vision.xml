@@ -16,6 +16,14 @@
       <arg type="(bss)" name="availability" direction="out"/>
     </method>
 
+    <!--
+        CreateSession:
+        @use_case: ``vision.describe`` for image descriptions,
+          ``vision.ocr`` for text extraction, or ``vision.segment`` for object boxes
+
+        The session @use_case selects which vision operation is permitted for
+        the session. Create separate sessions for different vision tasks.
+    -->
     <method name="CreateSession">
       <arg type="s" name="app_id" direction="in"/>
       <arg type="s" name="use_case" direction="in"/>
@@ -25,21 +33,38 @@
 
     <method name="Prewarm">
       <arg type="s" name="session_id" direction="in"/>
-      <arg type="s" name="prompt_prefix" direction="in"/>
     </method>
 
+    <!--
+        Describe:
+        @image: Base64-encoded PNG or JPEG image bytes
+        @text: Natural-language image description
+    -->
     <method name="Describe">
       <arg type="s" name="session_id" direction="in"/>
       <arg type="s" name="image" direction="in"/>
       <arg type="s" name="text" direction="out"/>
     </method>
 
+    <!--
+        Ocr:
+        @image: Base64-encoded PNG or JPEG image bytes
+        @text: Text extracted from the image
+    -->
     <method name="Ocr">
       <arg type="s" name="session_id" direction="in"/>
       <arg type="s" name="image" direction="in"/>
       <arg type="s" name="text" direction="out"/>
     </method>
 
+    <!--
+        Segment:
+        @image: Base64-encoded PNG or JPEG image bytes
+        @segments: Detected objects as ``(label, confidence, x, y, width, height)``
+
+        Segment coordinates are normalized rectangles in the ``0.0..1.0``
+        range relative to the image dimensions.
+    -->
     <method name="Segment">
       <arg type="s" name="session_id" direction="in"/>
       <arg type="s" name="image" direction="in"/>

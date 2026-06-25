@@ -53,8 +53,7 @@
 
     <method name="Prewarm">
       <arg type="o" name="session_handle" direction="in"/>
-      <arg type="s" name="prompt_prefix" direction="in"/>
-      <annotation name="org.qtproject.QtDBus.QtTypeName.In2" value="QVariantMap"/>
+      <annotation name="org.qtproject.QtDBus.QtTypeName.In1" value="QVariantMap"/>
       <arg type="a{sv}" name="options" direction="in"/>
     </method>
 
@@ -102,7 +101,7 @@
     </method>
 
     <!--
-        StreamGuidedResponse:
+        StreamRespondGuided:
 
         Starts streaming guided JSON snapshots. Snapshots are emitted as
         GuidedSnapshotReceived signals for @session_handle while the method call
@@ -110,11 +109,12 @@
         finished. Clients should subscribe before calling and consume signals
         concurrently with the method call.
     -->
-    <method name="StreamGuidedResponse">
+    <method name="StreamRespondGuided">
       <arg type="o" name="session_handle" direction="in"/>
       <arg type="s" name="prompt" direction="in"/>
       <arg type="a(sssb)" name="fields" direction="in"/>
-      <annotation name="org.qtproject.QtDBus.QtTypeName.In3" value="QVariantMap"/>
+      <arg type="a(sss)" name="tools" direction="in"/>
+      <annotation name="org.qtproject.QtDBus.QtTypeName.In4" value="QVariantMap"/>
       <arg type="a{sv}" name="options" direction="in"/>
     </method>
 
@@ -152,6 +152,12 @@
     <signal name="GuidedSnapshotReceived">
       <arg type="o" name="session_handle"/>
       <arg type="s" name="snapshot_json"/>
+      <arg type="b" name="done"/>
+    </signal>
+
+    <signal name="GuidedToolCallsReceived">
+      <arg type="o" name="session_handle"/>
+      <arg type="a(sss)" name="tool_calls"/>
       <arg type="b" name="done"/>
     </signal>
 

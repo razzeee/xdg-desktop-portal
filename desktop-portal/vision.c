@@ -135,7 +135,6 @@ static gboolean
 handle_vision_prewarm (XdpDbusVision       *object,
                        GDBusMethodInvocation *invocation,
                        const char            *arg_session_handle,
-                       const char            *arg_prompt_prefix,
                        GVariant              *arg_options)
 {
   Vision *vision = (Vision *) object;
@@ -152,10 +151,9 @@ handle_vision_prewarm (XdpDbusVision       *object,
   xdp_dbus_vision_emit_model_loading (object, session->id, "starting model");
 
   if (!xdp_dbus_impl_vision_call_prewarm_sync (vision->impl,
-                                              model_session_get_backend_session_id (model_session),
-                                              arg_prompt_prefix,
-                                              NULL,
-                                              &error))
+                                               model_session_get_backend_session_id (model_session),
+                                               NULL,
+                                               &error))
     {
       g_dbus_method_invocation_return_gerror (invocation, error);
       return G_DBUS_METHOD_INVOCATION_HANDLED;

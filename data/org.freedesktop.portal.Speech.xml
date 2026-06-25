@@ -19,6 +19,17 @@
       <arg type="(bss)" name="availability" direction="out"/>
     </method>
 
+    <!--
+        CreateSession:
+        @use_case: ``speech.transcribe`` for source-language transcription,
+          or ``speech.translate`` for speech-to-English translation
+        @instructions: Stable system instructions for this session
+        @options: Vardict with optional further information
+        @session_handle: Object path for the :ref:`org.freedesktop.portal.Session` object
+
+        The session @use_case selects whether Transcribe and StreamTranscribe
+        return a verbatim source-language transcript or an English translation.
+    -->
     <method name="CreateSession">
       <arg type="s" name="use_case" direction="in"/>
       <arg type="s" name="instructions" direction="in"/>
@@ -29,15 +40,30 @@
 
     <method name="Prewarm">
       <arg type="o" name="session_handle" direction="in"/>
-      <arg type="s" name="prompt_prefix" direction="in"/>
-      <annotation name="org.qtproject.QtDBus.QtTypeName.In2" value="QVariantMap"/>
+      <annotation name="org.qtproject.QtDBus.QtTypeName.In1" value="QVariantMap"/>
       <arg type="a{sv}" name="options" direction="in"/>
     </method>
 
+    <!--
+        Transcribe:
+        @session_handle: A speech session handle returned by CreateSession
+        @audio: Base64-encoded raw 16 kHz mono f32le PCM audio
+        @source_language_hint: Optional hint for the spoken input language,
+          such as an ISO 639-1 code like ``de``; pass an empty string for
+          auto-detect/no hint
+        @options: Vardict with optional further information
+        @text: Transcript or translation text
+
+        For sessions created with ``speech.transcribe``, returns a verbatim
+        transcript in the source language. For sessions created with
+        ``speech.translate``, returns an English translation. The
+        @source_language_hint argument only describes the input language; it
+        does not select translation mode or target language.
+    -->
     <method name="Transcribe">
       <arg type="o" name="session_handle" direction="in"/>
       <arg type="s" name="audio" direction="in"/>
-      <arg type="s" name="language_hint" direction="in"/>
+      <arg type="s" name="source_language_hint" direction="in"/>
       <annotation name="org.qtproject.QtDBus.QtTypeName.In3" value="QVariantMap"/>
       <arg type="a{sv}" name="options" direction="in"/>
       <arg type="s" name="text" direction="out"/>
@@ -46,16 +72,17 @@
     <!--
         StreamTranscribe:
 
-        Starts streaming transcription segments. Segments are emitted as
-        TranscriptionReceived signals for @session_handle while the method call
-        is in progress; the method reply only indicates that streaming has
-        finished. Clients should subscribe before calling and consume signals
-        concurrently with the method call.
+        Starts streaming transcription or translation segments. The @audio and
+        @source_language_hint arguments have the same meaning as Transcribe.
+        Segments are emitted as TranscriptionReceived signals for
+        @session_handle while the method call is in progress; the method reply
+        only indicates that streaming has finished. Clients should subscribe
+        before calling and consume signals concurrently with the method call.
     -->
     <method name="StreamTranscribe">
       <arg type="o" name="session_handle" direction="in"/>
       <arg type="s" name="audio" direction="in"/>
-      <arg type="s" name="language_hint" direction="in"/>
+      <arg type="s" name="source_language_hint" direction="in"/>
       <annotation name="org.qtproject.QtDBus.QtTypeName.In3" value="QVariantMap"/>
       <arg type="a{sv}" name="options" direction="in"/>
     </method>

@@ -16,6 +16,14 @@
       <arg type="(bss)" name="availability" direction="out"/>
     </method>
 
+    <!--
+        CreateSession:
+        @use_case: ``speech.transcribe`` for source-language transcription,
+          or ``speech.translate`` for speech-to-English translation
+
+        The session @use_case selects whether Transcribe and StreamTranscribe
+        return a verbatim source-language transcript or an English translation.
+    -->
     <method name="CreateSession">
       <arg type="s" name="app_id" direction="in"/>
       <arg type="s" name="use_case" direction="in"/>
@@ -25,21 +33,39 @@
 
     <method name="Prewarm">
       <arg type="s" name="session_id" direction="in"/>
-      <arg type="s" name="prompt_prefix" direction="in"/>
     </method>
 
+    <!--
+        Transcribe:
+        @audio: Base64-encoded raw 16 kHz mono f32le PCM audio
+        @source_language_hint: Optional hint for the spoken input language,
+          such as an ISO 639-1 code like ``de``; pass an empty string for
+          auto-detect/no hint
+
+        For ``speech.transcribe`` sessions, returns a source-language
+        transcript. For ``speech.translate`` sessions, returns an English
+        translation. @source_language_hint only describes the input language;
+        it does not select translation mode or target language.
+    -->
     <method name="Transcribe">
       <arg type="s" name="session_id" direction="in"/>
       <arg type="s" name="audio" direction="in"/>
-      <arg type="s" name="language_hint" direction="in"/>
+      <arg type="s" name="source_language_hint" direction="in"/>
       <arg type="s" name="text" direction="out"/>
     </method>
 
-    <!-- Stream payloads are emitted as TranscriptionReceived signals while this call is in progress. -->
+    <!--
+        StreamTranscribe:
+
+        Streams transcription or translation segments. The @audio and
+        @source_language_hint arguments have the same meaning as Transcribe.
+        Payloads are emitted as TranscriptionReceived signals while this call
+        is in progress.
+    -->
     <method name="StreamTranscribe">
       <arg type="s" name="session_id" direction="in"/>
       <arg type="s" name="audio" direction="in"/>
-      <arg type="s" name="language_hint" direction="in"/>
+      <arg type="s" name="source_language_hint" direction="in"/>
     </method>
 
     <method name="EndSession">

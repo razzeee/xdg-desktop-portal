@@ -160,7 +160,6 @@ static gboolean
 handle_speech_prewarm (XdpDbusSpeech       *object,
                        GDBusMethodInvocation *invocation,
                        const char            *arg_session_handle,
-                       const char            *arg_prompt_prefix,
                        GVariant              *arg_options)
 {
   Speech *speech = (Speech *) object;
@@ -177,10 +176,9 @@ handle_speech_prewarm (XdpDbusSpeech       *object,
   xdp_dbus_speech_emit_model_loading (object, session->id, "starting model");
 
   if (!xdp_dbus_impl_speech_call_prewarm_sync (speech->impl,
-                                              model_session_get_backend_session_id (model_session),
-                                              arg_prompt_prefix,
-                                              NULL,
-                                              &error))
+                                               model_session_get_backend_session_id (model_session),
+                                               NULL,
+                                               &error))
     {
       g_dbus_method_invocation_return_gerror (invocation, error);
       return G_DBUS_METHOD_INVOCATION_HANDLED;
@@ -195,7 +193,7 @@ handle_speech_transcribe (XdpDbusSpeech       *object,
                           GDBusMethodInvocation *invocation,
                           const char            *arg_session_handle,
                           const char            *arg_audio,
-                          const char            *arg_language_hint,
+                          const char            *arg_source_language_hint,
                           GVariant              *arg_options)
 {
   Speech *speech = (Speech *) object;
@@ -214,7 +212,7 @@ handle_speech_transcribe (XdpDbusSpeech       *object,
   if (!xdp_dbus_impl_speech_call_transcribe_sync (speech->impl,
                                                  model_session_get_backend_session_id (model_session),
                                                  arg_audio,
-                                                 arg_language_hint,
+                                                  arg_source_language_hint,
                                                  &text,
                                                  NULL,
                                                  &error))
@@ -232,7 +230,7 @@ handle_speech_stream_transcribe (XdpDbusSpeech       *object,
                                  GDBusMethodInvocation *invocation,
                                  const char            *arg_session_handle,
                                  const char            *arg_audio,
-                                 const char            *arg_language_hint,
+                                 const char            *arg_source_language_hint,
                                  GVariant              *arg_options)
 {
   Speech *speech = (Speech *) object;
@@ -261,7 +259,7 @@ handle_speech_stream_transcribe (XdpDbusSpeech       *object,
   if (!xdp_dbus_impl_speech_call_stream_transcribe_sync (speech->impl,
                                                         model_session_get_backend_session_id (model_session),
                                                         arg_audio,
-                                                        arg_language_hint,
+                                                         arg_source_language_hint,
                                                         NULL,
                                                         &error))
     {
