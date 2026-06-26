@@ -78,17 +78,10 @@ handle_vision_create_session (XdpDbusVision       *object,
 {
   Vision *vision = (Vision *) object;
   XdpAppInfo *app_info = xdp_invocation_get_app_info (invocation);
-  g_autoptr(GVariant) options = NULL;
   g_autofree char *backend_session_id = NULL;
   g_autoptr(XdpSession) session = NULL;
   GDBusConnection *connection = g_dbus_method_invocation_get_connection (invocation);
   g_autoptr(GError) error = NULL;
-
-  if (!create_session_options_from_vardict (arg_options, &options, &error))
-    {
-      g_dbus_method_invocation_return_gerror (invocation, error);
-      return G_DBUS_METHOD_INVOCATION_HANDLED;
-    }
 
   if (!xdp_dbus_impl_vision_call_create_session_sync (vision->impl,
                                                       xdp_app_info_get_id (app_info),
@@ -108,7 +101,6 @@ handle_vision_create_session (XdpDbusVision       *object,
                                             G_OBJECT (vision->impl),
                                             MODEL_SESSION_VISION,
                                             backend_session_id,
-                                            options,
                                             &error));
   if (session == NULL)
     {

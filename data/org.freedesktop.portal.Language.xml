@@ -37,11 +37,8 @@
         @options: Vardict with optional further information
         @session_handle: Object path for the :ref:`org.freedesktop.portal.Session` object
 
-        Creates a language model session. Supported keys in @options include:
-
-        * ``session_handle_token`` (``s``)
-
-          A string that will be used as the last element of @session_handle.
+        Creates a language model session. The portal generates @session_handle;
+        clients cannot choose the session handle token.
     -->
     <method name="CreateSession">
       <arg type="s" name="use_case" direction="in"/>

@@ -32,10 +32,6 @@ struct _ModelSessionClass
 
 G_DEFINE_TYPE (ModelSession, model_session, xdp_session_get_type ())
 
-static XdpOptionKey create_session_options[] = {
-  { "session_handle_token", G_VARIANT_TYPE_STRING, NULL },
-};
-
 static XdpOptionKey generation_options[] = {
   { "maximum_response_tokens", G_VARIANT_TYPE_INT64, NULL },
   { "temperature", G_VARIANT_TYPE_DOUBLE, NULL },
@@ -127,26 +123,19 @@ model_session_new (XdpContext       *context,
                    GObject          *impl,
                    ModelSessionKind  kind,
                    const char       *backend_session_id,
-                   GVariant         *options,
                    GError          **error)
 {
   g_autofree char *generated_token = NULL;
-  const char *session_token;
   XdpSession *session;
   ModelSession *model_session;
 
-  session_token = lookup_session_token (options);
-  if (session_token == NULL)
-    {
-      generated_token = xdp_generate_token ();
-      session_token = generated_token;
-    }
+  generated_token = xdp_generate_token ();
 
   session = g_initable_new (MODEL_TYPE_SESSION, NULL, error,
                             "context", context,
                             "sender", xdp_app_info_get_sender (app_info),
                             "app-id", xdp_app_info_get_id (app_info),
-                            "token", session_token,
+                            "token", generated_token,
                             "connection", connection,
                             NULL);
   if (session == NULL)
@@ -218,21 +207,4 @@ generation_options_from_vardict (GVariant  *arg_options,
                                             sampling_mode,
                                             source_language_hint,
                                             target_language_hint));
-}
-
-gboolean
-create_session_options_from_vardict (GVariant  *arg_options,
-                                     GVariant **out_options,
-                                     GError   **error)
-{
-  g_auto(GVariantBuilder) options_builder =
-    G_VARIANT_BUILDER_INIT (G_VARIANT_TYPE_VARDICT);
-
-  if (!xdp_filter_options (arg_options, &options_builder,
-                           create_session_options, G_N_ELEMENTS (create_session_options),
-                           NULL, error))
-    return FALSE;
-
-  *out_options = g_variant_ref_sink (g_variant_builder_end (&options_builder));
-  return TRUE;
 }

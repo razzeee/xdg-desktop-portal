@@ -27,7 +27,6 @@ ModelSession *model_session_new (XdpContext       *context,
                                  GObject          *impl,
                                  ModelSessionKind  kind,
                                  const char       *backend_session_id,
-                                 GVariant         *options,
                                  GError          **error);
 
 XdpSession *lookup_model_session (GDBusMethodInvocation *invocation,
@@ -38,10 +37,6 @@ const char *model_session_get_backend_session_id (ModelSession *session);
 
 GVariant *generation_options_from_vardict (GVariant  *arg_options,
                                            GError   **error);
-
-gboolean create_session_options_from_vardict (GVariant  *arg_options,
-                                              GVariant **out_options,
-                                              GError   **error);
 
 void end_backend_session (GObject          *impl,
                           ModelSessionKind  kind,
