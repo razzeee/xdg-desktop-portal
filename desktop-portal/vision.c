@@ -49,6 +49,7 @@ typedef struct _VisionSignalForward
   XdpDbusImplVision *impl;
   char *backend_session_id;
   char *session_handle;
+  gulong loading_handler_id;
   gulong handler_id;
 } VisionSignalForward;
 
@@ -69,11 +70,8 @@ vision_signal_forward_new (Vision            *vision,
 }
 
 static void
-vision_signal_forward_free (gpointer  data,
-                            GClosure *closure)
+vision_signal_forward_unref (VisionSignalForward *forward)
 {
-  VisionSignalForward *forward = data;
-
   g_clear_object (&forward->vision);
   g_clear_object (&forward->impl);
   g_clear_pointer (&forward->backend_session_id, g_free);
@@ -82,15 +80,51 @@ vision_signal_forward_free (gpointer  data,
 }
 
 static void
+vision_signal_forward_free (gpointer  data,
+                            GClosure *closure)
+{
+  vision_signal_forward_unref (data);
+}
+
+static void
 vision_signal_forward_disconnect (VisionSignalForward *forward)
 {
   XdpDbusImplVision *impl = forward->impl;
+  gulong loading_handler_id = forward->loading_handler_id;
   gulong handler_id = forward->handler_id;
 
+  forward->loading_handler_id = 0;
   forward->handler_id = 0;
 
+  if (loading_handler_id != 0)
+    g_signal_handler_disconnect (impl, loading_handler_id);
   if (handler_id != 0)
     g_signal_handler_disconnect (impl, handler_id);
+}
+
+static void
+forward_model_loading (XdpDbusImplVision *impl,
+                       const char        *session_id,
+                       const char        *message,
+                       gpointer           user_data)
+{
+  VisionSignalForward *forward = user_data;
+
+  if (g_strcmp0 (session_id, forward->backend_session_id) != 0)
+    return;
+
+  xdp_dbus_vision_emit_model_loading (XDP_DBUS_VISION (forward->vision),
+                                      forward->session_handle,
+                                      message);
+}
+
+static void
+vision_signal_forward_connect_loading (VisionSignalForward *forward)
+{
+  forward->loading_handler_id = g_signal_connect (forward->impl,
+                                                  "model-loading",
+                                                  G_CALLBACK (forward_model_loading),
+                                                  forward);
 }
 
 static void
@@ -225,6 +259,7 @@ handle_vision_prewarm (XdpDbusVision       *object,
   g_autoptr(XdpSession) session = NULL;
   ModelSession *model_session;
   g_autoptr(GError) error = NULL;
+  VisionSignalForward *forward;
 
   session = lookup_model_session (invocation, arg_session_handle, MODEL_SESSION_VISION);
   if (session == NULL)
@@ -232,17 +267,25 @@ handle_vision_prewarm (XdpDbusVision       *object,
 
   SESSION_AUTOLOCK (session);
   model_session = MODEL_SESSION (session);
-  xdp_dbus_vision_emit_model_loading (object, session->id, "starting model");
+  forward = vision_signal_forward_new (vision,
+                                       vision->impl,
+                                       model_session_get_backend_session_id (model_session),
+                                       session->id);
+  vision_signal_forward_connect_loading (forward);
 
   if (!xdp_dbus_impl_vision_call_prewarm_sync (vision->impl,
-                                               model_session_get_backend_session_id (model_session),
-                                               NULL,
-                                               &error))
+                                                model_session_get_backend_session_id (model_session),
+                                                NULL,
+                                                &error))
     {
+      vision_signal_forward_disconnect (forward);
+      vision_signal_forward_unref (forward);
       g_dbus_method_invocation_return_gerror (invocation, error);
       return G_DBUS_METHOD_INVOCATION_HANDLED;
     }
 
+  vision_signal_forward_disconnect (forward);
+  vision_signal_forward_unref (forward);
   xdp_dbus_vision_complete_prewarm (object, invocation);
   return G_DBUS_METHOD_INVOCATION_HANDLED;
 }
@@ -268,9 +311,10 @@ handle_vision_stream_describe (XdpDbusVision       *object,
   model_session = MODEL_SESSION (session);
 
   forward = vision_signal_forward_new (vision,
-                                       vision->impl,
-                                       model_session_get_backend_session_id (model_session),
-                                       session->id);
+                                        vision->impl,
+                                        model_session_get_backend_session_id (model_session),
+                                        session->id);
+  vision_signal_forward_connect_loading (forward);
   forward->handler_id = g_signal_connect_data (vision->impl,
                                                "vision-text-received",
                                                G_CALLBACK (forward_vision_text_received),
@@ -314,9 +358,10 @@ handle_vision_stream_ocr (XdpDbusVision       *object,
   model_session = MODEL_SESSION (session);
 
   forward = vision_signal_forward_new (vision,
-                                       vision->impl,
-                                       model_session_get_backend_session_id (model_session),
-                                       session->id);
+                                        vision->impl,
+                                        model_session_get_backend_session_id (model_session),
+                                        session->id);
+  vision_signal_forward_connect_loading (forward);
   forward->handler_id = g_signal_connect_data (vision->impl,
                                                "vision-text-received",
                                                G_CALLBACK (forward_vision_text_received),
@@ -360,9 +405,10 @@ handle_vision_stream_segment (XdpDbusVision       *object,
   model_session = MODEL_SESSION (session);
 
   forward = vision_signal_forward_new (vision,
-                                       vision->impl,
-                                       model_session_get_backend_session_id (model_session),
-                                       session->id);
+                                        vision->impl,
+                                        model_session_get_backend_session_id (model_session),
+                                        session->id);
+  vision_signal_forward_connect_loading (forward);
   forward->handler_id = g_signal_connect_data (vision->impl,
                                                "vision-segments-received",
                                                G_CALLBACK (forward_vision_segments_received),

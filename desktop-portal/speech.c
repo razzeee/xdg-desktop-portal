@@ -49,6 +49,7 @@ typedef struct _SpeechSignalForward
   XdpDbusImplSpeech *impl;
   char *backend_session_id;
   char *session_handle;
+  gulong loading_handler_id;
   gulong handler_id;
 } SpeechSignalForward;
 
@@ -69,11 +70,8 @@ speech_signal_forward_new (Speech            *speech,
 }
 
 static void
-speech_signal_forward_free (gpointer  data,
-                            GClosure *closure)
+speech_signal_forward_unref (SpeechSignalForward *forward)
 {
-  SpeechSignalForward *forward = data;
-
   g_clear_object (&forward->speech);
   g_clear_object (&forward->impl);
   g_clear_pointer (&forward->backend_session_id, g_free);
@@ -82,15 +80,51 @@ speech_signal_forward_free (gpointer  data,
 }
 
 static void
+speech_signal_forward_free (gpointer  data,
+                            GClosure *closure)
+{
+  speech_signal_forward_unref (data);
+}
+
+static void
 speech_signal_forward_disconnect (SpeechSignalForward *forward)
 {
   XdpDbusImplSpeech *impl = forward->impl;
+  gulong loading_handler_id = forward->loading_handler_id;
   gulong handler_id = forward->handler_id;
 
+  forward->loading_handler_id = 0;
   forward->handler_id = 0;
 
+  if (loading_handler_id != 0)
+    g_signal_handler_disconnect (impl, loading_handler_id);
   if (handler_id != 0)
     g_signal_handler_disconnect (impl, handler_id);
+}
+
+static void
+forward_model_loading (XdpDbusImplSpeech *impl,
+                       const char        *session_id,
+                       const char        *message,
+                       gpointer           user_data)
+{
+  SpeechSignalForward *forward = user_data;
+
+  if (g_strcmp0 (session_id, forward->backend_session_id) != 0)
+    return;
+
+  xdp_dbus_speech_emit_model_loading (XDP_DBUS_SPEECH (forward->speech),
+                                      forward->session_handle,
+                                      message);
+}
+
+static void
+speech_signal_forward_connect_loading (SpeechSignalForward *forward)
+{
+  forward->loading_handler_id = g_signal_connect (forward->impl,
+                                                  "model-loading",
+                                                  G_CALLBACK (forward_model_loading),
+                                                  forward);
 }
 
 static void
@@ -204,6 +238,7 @@ handle_speech_prewarm (XdpDbusSpeech       *object,
   g_autoptr(XdpSession) session = NULL;
   ModelSession *model_session;
   g_autoptr(GError) error = NULL;
+  SpeechSignalForward *forward;
 
   session = lookup_model_session (invocation, arg_session_handle, MODEL_SESSION_SPEECH);
   if (session == NULL)
@@ -211,17 +246,25 @@ handle_speech_prewarm (XdpDbusSpeech       *object,
 
   SESSION_AUTOLOCK (session);
   model_session = MODEL_SESSION (session);
-  xdp_dbus_speech_emit_model_loading (object, session->id, "starting model");
+  forward = speech_signal_forward_new (speech,
+                                       speech->impl,
+                                       model_session_get_backend_session_id (model_session),
+                                       session->id);
+  speech_signal_forward_connect_loading (forward);
 
   if (!xdp_dbus_impl_speech_call_prewarm_sync (speech->impl,
-                                               model_session_get_backend_session_id (model_session),
-                                               NULL,
-                                               &error))
+                                                model_session_get_backend_session_id (model_session),
+                                                NULL,
+                                                &error))
     {
+      speech_signal_forward_disconnect (forward);
+      speech_signal_forward_unref (forward);
       g_dbus_method_invocation_return_gerror (invocation, error);
       return G_DBUS_METHOD_INVOCATION_HANDLED;
     }
 
+  speech_signal_forward_disconnect (forward);
+  speech_signal_forward_unref (forward);
   xdp_dbus_speech_complete_prewarm (object, invocation);
   return G_DBUS_METHOD_INVOCATION_HANDLED;
 }
@@ -246,12 +289,12 @@ handle_speech_stream_transcribe (XdpDbusSpeech       *object,
 
   SESSION_AUTOLOCK (session);
   model_session = MODEL_SESSION (session);
-  xdp_dbus_speech_emit_model_loading (object, session->id, "starting model");
 
   forward = speech_signal_forward_new (speech,
-                                       speech->impl,
-                                       model_session_get_backend_session_id (model_session),
-                                       session->id);
+                                        speech->impl,
+                                        model_session_get_backend_session_id (model_session),
+                                        session->id);
+  speech_signal_forward_connect_loading (forward);
   forward->handler_id = g_signal_connect_data (speech->impl,
                                                "transcription-received",
                                                G_CALLBACK (forward_transcription_received),

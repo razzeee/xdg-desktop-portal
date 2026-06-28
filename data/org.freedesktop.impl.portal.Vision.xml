@@ -75,6 +75,7 @@
     </method>
 
     <signal name="ModelLoading">
+      <arg type="s" name="session_id"/>
       <arg type="s" name="message"/>
     </signal>
 
