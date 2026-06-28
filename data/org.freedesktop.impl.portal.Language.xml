@@ -34,7 +34,7 @@
       <arg type="(xdsss)" name="options" direction="in"/>
     </method>
 
-    <!-- Stream payloads are emitted as PredictionReceived signals while this call is in progress. -->
+    <!-- Stream payloads are emitted as PredictionReceived signals while this call is in progress. Newer calls for the same session supersede older in-flight prediction calls. -->
     <method name="StreamPredictNext">
       <arg type="s" name="session_id" direction="in"/>
       <arg type="s" name="prefix" direction="in"/>

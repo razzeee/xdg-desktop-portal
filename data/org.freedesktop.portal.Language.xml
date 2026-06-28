@@ -70,6 +70,12 @@
       <arg type="a{sv}" name="options" direction="in"/>
     </method>
 
+    <!--
+        StreamPredictNext:
+
+        Starts inline prediction for @prefix. A newer call for the same session
+        supersedes older in-flight prediction calls.
+    -->
     <method name="StreamPredictNext">
       <arg type="o" name="session_handle" direction="in"/>
       <arg type="s" name="prefix" direction="in"/>

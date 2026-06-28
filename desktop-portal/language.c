@@ -327,6 +327,8 @@ handle_language_stream_predict_next (XdpDbusLanguage      *object,
   ModelSession *model_session;
   g_autoptr(GVariant) options = NULL;
   g_autoptr(GError) error = NULL;
+  g_autofree char *backend_session_id = NULL;
+  g_autofree char *session_handle = NULL;
   LanguageSignalForward *forward;
 
   session = lookup_model_session (invocation, arg_session_handle, MODEL_SESSION_LANGUAGE);
@@ -340,14 +342,18 @@ handle_language_stream_predict_next (XdpDbusLanguage      *object,
       return G_DBUS_METHOD_INVOCATION_HANDLED;
     }
 
-  SESSION_AUTOLOCK (session);
-  model_session = MODEL_SESSION (session);
-  xdp_dbus_language_emit_model_loading (object, session->id, "starting model");
+  {
+    SESSION_AUTOLOCK (session);
+    model_session = MODEL_SESSION (session);
+    backend_session_id = g_strdup (model_session_get_backend_session_id (model_session));
+    session_handle = g_strdup (session->id);
+    xdp_dbus_language_emit_model_loading (object, session_handle, "starting model");
+  }
 
   forward = language_signal_forward_new (language,
-                                         language->impl,
-                                         model_session_get_backend_session_id (model_session),
-                                         session->id);
+                                          language->impl,
+                                          backend_session_id,
+                                          session_handle);
   forward->handler_id = g_signal_connect_data (language->impl,
                                                "prediction-received",
                                                G_CALLBACK (forward_prediction_received),
@@ -356,9 +362,9 @@ handle_language_stream_predict_next (XdpDbusLanguage      *object,
                                                G_CONNECT_DEFAULT);
 
   if (!xdp_dbus_impl_language_call_stream_predict_next_sync (language->impl,
-                                                             model_session_get_backend_session_id (model_session),
-                                                             arg_prefix,
-                                                             options,
+                                                              backend_session_id,
+                                                              arg_prefix,
+                                                              options,
                                                              NULL,
                                                              &error))
     {
