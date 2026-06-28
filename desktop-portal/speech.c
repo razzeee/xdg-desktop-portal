@@ -47,24 +47,36 @@ typedef struct _SpeechSignalForward
 {
   Speech *speech;
   XdpDbusImplSpeech *impl;
+  GDBusMethodInvocation *invocation;
   char *backend_session_id;
   char *session_handle;
   gulong loading_handler_id;
   gulong handler_id;
+  guint call_kind;
 } SpeechSignalForward;
+
+typedef enum
+{
+  SPEECH_CALL_PREWARM,
+  SPEECH_CALL_STREAM_TRANSCRIBE,
+} SpeechCallKind;
 
 static SpeechSignalForward *
 speech_signal_forward_new (Speech            *speech,
                            XdpDbusImplSpeech *impl,
                            const char        *backend_session_id,
-                           const char        *session_handle)
+                           const char        *session_handle,
+                           GDBusMethodInvocation *invocation,
+                           SpeechCallKind     call_kind)
 {
   SpeechSignalForward *forward = g_new0 (SpeechSignalForward, 1);
 
   forward->speech = g_object_ref (speech);
   forward->impl = g_object_ref (impl);
+  forward->invocation = g_object_ref (invocation);
   forward->backend_session_id = g_strdup (backend_session_id);
   forward->session_handle = g_strdup (session_handle);
+  forward->call_kind = call_kind;
 
   return forward;
 }
@@ -74,16 +86,10 @@ speech_signal_forward_unref (SpeechSignalForward *forward)
 {
   g_clear_object (&forward->speech);
   g_clear_object (&forward->impl);
+  g_clear_object (&forward->invocation);
   g_clear_pointer (&forward->backend_session_id, g_free);
   g_clear_pointer (&forward->session_handle, g_free);
   g_free (forward);
-}
-
-static void
-speech_signal_forward_free (gpointer  data,
-                            GClosure *closure)
-{
-  speech_signal_forward_unref (data);
 }
 
 static void
@@ -125,6 +131,49 @@ speech_signal_forward_connect_loading (SpeechSignalForward *forward)
                                                   "model-loading",
                                                   G_CALLBACK (forward_model_loading),
                                                   forward);
+}
+
+static void
+finish_speech_call (GObject      *source,
+                    GAsyncResult *result,
+                    gpointer      user_data)
+{
+  SpeechSignalForward *forward = user_data;
+  XdpDbusImplSpeech *impl = XDP_DBUS_IMPL_SPEECH (source);
+  XdpDbusSpeech *object = XDP_DBUS_SPEECH (forward->speech);
+  g_autoptr(GError) error = NULL;
+  gboolean ok = FALSE;
+
+  switch ((SpeechCallKind) forward->call_kind)
+    {
+    case SPEECH_CALL_PREWARM:
+      ok = xdp_dbus_impl_speech_call_prewarm_finish (impl, result, &error);
+      break;
+    case SPEECH_CALL_STREAM_TRANSCRIBE:
+      ok = xdp_dbus_impl_speech_call_stream_transcribe_finish (impl, result, &error);
+      break;
+    }
+
+  speech_signal_forward_disconnect (forward);
+
+  if (!ok)
+    {
+      g_dbus_method_invocation_return_gerror (forward->invocation, error);
+      speech_signal_forward_unref (forward);
+      return;
+    }
+
+  switch ((SpeechCallKind) forward->call_kind)
+    {
+    case SPEECH_CALL_PREWARM:
+      xdp_dbus_speech_complete_prewarm (object, forward->invocation);
+      break;
+    case SPEECH_CALL_STREAM_TRANSCRIBE:
+      xdp_dbus_speech_complete_stream_transcribe (object, forward->invocation);
+      break;
+    }
+
+  speech_signal_forward_unref (forward);
 }
 
 static void
@@ -237,7 +286,6 @@ handle_speech_prewarm (XdpDbusSpeech       *object,
   Speech *speech = (Speech *) object;
   g_autoptr(XdpSession) session = NULL;
   ModelSession *model_session;
-  g_autoptr(GError) error = NULL;
   SpeechSignalForward *forward;
 
   session = lookup_model_session (invocation, arg_session_handle, MODEL_SESSION_SPEECH);
@@ -249,23 +297,16 @@ handle_speech_prewarm (XdpDbusSpeech       *object,
   forward = speech_signal_forward_new (speech,
                                        speech->impl,
                                        model_session_get_backend_session_id (model_session),
-                                       session->id);
+                                       session->id,
+                                       invocation,
+                                       SPEECH_CALL_PREWARM);
   speech_signal_forward_connect_loading (forward);
 
-  if (!xdp_dbus_impl_speech_call_prewarm_sync (speech->impl,
-                                                model_session_get_backend_session_id (model_session),
-                                                NULL,
-                                                &error))
-    {
-      speech_signal_forward_disconnect (forward);
-      speech_signal_forward_unref (forward);
-      g_dbus_method_invocation_return_gerror (invocation, error);
-      return G_DBUS_METHOD_INVOCATION_HANDLED;
-    }
-
-  speech_signal_forward_disconnect (forward);
-  speech_signal_forward_unref (forward);
-  xdp_dbus_speech_complete_prewarm (object, invocation);
+  xdp_dbus_impl_speech_call_prewarm (speech->impl,
+                                     model_session_get_backend_session_id (model_session),
+                                     NULL,
+                                     finish_speech_call,
+                                     forward);
   return G_DBUS_METHOD_INVOCATION_HANDLED;
 }
 
@@ -280,7 +321,6 @@ handle_speech_stream_transcribe (XdpDbusSpeech       *object,
   Speech *speech = (Speech *) object;
   g_autoptr(XdpSession) session = NULL;
   ModelSession *model_session;
-  g_autoptr(GError) error = NULL;
   SpeechSignalForward *forward;
 
   session = lookup_model_session (invocation, arg_session_handle, MODEL_SESSION_SPEECH);
@@ -293,28 +333,22 @@ handle_speech_stream_transcribe (XdpDbusSpeech       *object,
   forward = speech_signal_forward_new (speech,
                                         speech->impl,
                                         model_session_get_backend_session_id (model_session),
-                                        session->id);
+                                        session->id,
+                                        invocation,
+                                        SPEECH_CALL_STREAM_TRANSCRIBE);
   speech_signal_forward_connect_loading (forward);
-  forward->handler_id = g_signal_connect_data (speech->impl,
-                                               "transcription-received",
-                                               G_CALLBACK (forward_transcription_received),
-                                               forward,
-                                               speech_signal_forward_free,
-                                               G_CONNECT_DEFAULT);
+  forward->handler_id = g_signal_connect (speech->impl,
+                                          "transcription-received",
+                                          G_CALLBACK (forward_transcription_received),
+                                          forward);
 
-  if (!xdp_dbus_impl_speech_call_stream_transcribe_sync (speech->impl,
-                                                        model_session_get_backend_session_id (model_session),
-                                                        arg_audio,
-                                                         arg_source_language_hint,
-                                                        NULL,
-                                                        &error))
-    {
-      speech_signal_forward_disconnect (forward);
-      g_dbus_method_invocation_return_gerror (invocation, error);
-      return G_DBUS_METHOD_INVOCATION_HANDLED;
-    }
-
-  xdp_dbus_speech_complete_stream_transcribe (object, invocation);
+  xdp_dbus_impl_speech_call_stream_transcribe (speech->impl,
+                                               model_session_get_backend_session_id (model_session),
+                                               arg_audio,
+                                               arg_source_language_hint,
+                                               NULL,
+                                               finish_speech_call,
+                                               forward);
   return G_DBUS_METHOD_INVOCATION_HANDLED;
 }
 

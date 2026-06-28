@@ -47,25 +47,41 @@ typedef struct _LanguageSignalForward
 {
   Language *language;
   XdpDbusImplLanguage *impl;
+  GDBusMethodInvocation *invocation;
   char *backend_session_id;
   char *session_handle;
   gulong loading_handler_id;
   gulong handler_id;
   gulong sibling_handler_id;
+  guint call_kind;
 } LanguageSignalForward;
+
+typedef enum
+{
+  LANGUAGE_CALL_PREWARM,
+  LANGUAGE_CALL_STREAM_PREDICT_NEXT,
+  LANGUAGE_CALL_STREAM_RESPONSE,
+  LANGUAGE_CALL_STREAM_RESPOND_GUIDED,
+  LANGUAGE_CALL_STREAM_SUBMIT_TOOL_RESULTS_GUIDED,
+  LANGUAGE_CALL_STREAM_EMBED,
+} LanguageCallKind;
 
 static LanguageSignalForward *
 language_signal_forward_new (Language           *language,
                              XdpDbusImplLanguage *impl,
                              const char         *backend_session_id,
-                             const char         *session_handle)
+                             const char         *session_handle,
+                             GDBusMethodInvocation *invocation,
+                             LanguageCallKind    call_kind)
 {
   LanguageSignalForward *forward = g_new0 (LanguageSignalForward, 1);
 
   forward->language = g_object_ref (language);
   forward->impl = g_object_ref (impl);
+  forward->invocation = g_object_ref (invocation);
   forward->backend_session_id = g_strdup (backend_session_id);
   forward->session_handle = g_strdup (session_handle);
+  forward->call_kind = call_kind;
 
   return forward;
 }
@@ -75,16 +91,10 @@ language_signal_forward_unref (LanguageSignalForward *forward)
 {
   g_clear_object (&forward->language);
   g_clear_object (&forward->impl);
+  g_clear_object (&forward->invocation);
   g_clear_pointer (&forward->backend_session_id, g_free);
   g_clear_pointer (&forward->session_handle, g_free);
   g_free (forward);
-}
-
-static void
-language_signal_forward_free (gpointer  data,
-                              GClosure *closure)
-{
-  language_signal_forward_unref (data);
 }
 
 static void
@@ -130,6 +140,73 @@ language_signal_forward_connect_loading (LanguageSignalForward *forward)
                                                   "model-loading",
                                                   G_CALLBACK (forward_model_loading),
                                                   forward);
+}
+
+static void
+finish_language_call (GObject      *source,
+                      GAsyncResult *result,
+                      gpointer      user_data)
+{
+  LanguageSignalForward *forward = user_data;
+  XdpDbusImplLanguage *impl = XDP_DBUS_IMPL_LANGUAGE (source);
+  XdpDbusLanguage *object = XDP_DBUS_LANGUAGE (forward->language);
+  g_autoptr(GError) error = NULL;
+  gboolean ok = FALSE;
+
+  switch ((LanguageCallKind) forward->call_kind)
+    {
+    case LANGUAGE_CALL_PREWARM:
+      ok = xdp_dbus_impl_language_call_prewarm_finish (impl, result, &error);
+      break;
+    case LANGUAGE_CALL_STREAM_PREDICT_NEXT:
+      ok = xdp_dbus_impl_language_call_stream_predict_next_finish (impl, result, &error);
+      break;
+    case LANGUAGE_CALL_STREAM_RESPONSE:
+      ok = xdp_dbus_impl_language_call_stream_response_finish (impl, result, &error);
+      break;
+    case LANGUAGE_CALL_STREAM_RESPOND_GUIDED:
+      ok = xdp_dbus_impl_language_call_stream_respond_guided_finish (impl, result, &error);
+      break;
+    case LANGUAGE_CALL_STREAM_SUBMIT_TOOL_RESULTS_GUIDED:
+      ok = xdp_dbus_impl_language_call_stream_submit_tool_results_guided_finish (impl, result, &error);
+      break;
+    case LANGUAGE_CALL_STREAM_EMBED:
+      ok = xdp_dbus_impl_language_call_stream_embed_finish (impl, result, &error);
+      break;
+    }
+
+  language_signal_forward_disconnect (forward);
+
+  if (!ok)
+    {
+      g_dbus_method_invocation_return_gerror (forward->invocation, error);
+      language_signal_forward_unref (forward);
+      return;
+    }
+
+  switch ((LanguageCallKind) forward->call_kind)
+    {
+    case LANGUAGE_CALL_PREWARM:
+      xdp_dbus_language_complete_prewarm (object, forward->invocation);
+      break;
+    case LANGUAGE_CALL_STREAM_PREDICT_NEXT:
+      xdp_dbus_language_complete_stream_predict_next (object, forward->invocation);
+      break;
+    case LANGUAGE_CALL_STREAM_RESPONSE:
+      xdp_dbus_language_complete_stream_response (object, forward->invocation);
+      break;
+    case LANGUAGE_CALL_STREAM_RESPOND_GUIDED:
+      xdp_dbus_language_complete_stream_respond_guided (object, forward->invocation);
+      break;
+    case LANGUAGE_CALL_STREAM_SUBMIT_TOOL_RESULTS_GUIDED:
+      xdp_dbus_language_complete_stream_submit_tool_results_guided (object, forward->invocation);
+      break;
+    case LANGUAGE_CALL_STREAM_EMBED:
+      xdp_dbus_language_complete_stream_embed (object, forward->invocation);
+      break;
+    }
+
+  language_signal_forward_unref (forward);
 }
 
 static void
@@ -326,7 +403,6 @@ handle_language_prewarm (XdpDbusLanguage      *object,
   Language *language = (Language *) object;
   g_autoptr(XdpSession) session = NULL;
   ModelSession *model_session;
-  g_autoptr(GError) error = NULL;
   LanguageSignalForward *forward;
 
   session = lookup_model_session (invocation, arg_session_handle, MODEL_SESSION_LANGUAGE);
@@ -338,23 +414,16 @@ handle_language_prewarm (XdpDbusLanguage      *object,
   forward = language_signal_forward_new (language,
                                          language->impl,
                                          model_session_get_backend_session_id (model_session),
-                                         session->id);
+                                         session->id,
+                                         invocation,
+                                         LANGUAGE_CALL_PREWARM);
   language_signal_forward_connect_loading (forward);
 
-  if (!xdp_dbus_impl_language_call_prewarm_sync (language->impl,
-                                                  model_session_get_backend_session_id (model_session),
-                                                  NULL,
-                                                  &error))
-    {
-      language_signal_forward_disconnect (forward);
-      language_signal_forward_unref (forward);
-      g_dbus_method_invocation_return_gerror (invocation, error);
-      return G_DBUS_METHOD_INVOCATION_HANDLED;
-    }
-
-  language_signal_forward_disconnect (forward);
-  language_signal_forward_unref (forward);
-  xdp_dbus_language_complete_prewarm (object, invocation);
+  xdp_dbus_impl_language_call_prewarm (language->impl,
+                                       model_session_get_backend_session_id (model_session),
+                                       NULL,
+                                       finish_language_call,
+                                       forward);
   return G_DBUS_METHOD_INVOCATION_HANDLED;
 }
 
@@ -395,28 +464,22 @@ handle_language_stream_predict_next (XdpDbusLanguage      *object,
   forward = language_signal_forward_new (language,
                                           language->impl,
                                           backend_session_id,
-                                          session_handle);
+                                          session_handle,
+                                          invocation,
+                                          LANGUAGE_CALL_STREAM_PREDICT_NEXT);
   language_signal_forward_connect_loading (forward);
-  forward->handler_id = g_signal_connect_data (language->impl,
-                                               "prediction-received",
-                                               G_CALLBACK (forward_prediction_received),
-                                               forward,
-                                               language_signal_forward_free,
-                                               G_CONNECT_DEFAULT);
+  forward->handler_id = g_signal_connect (language->impl,
+                                          "prediction-received",
+                                          G_CALLBACK (forward_prediction_received),
+                                          forward);
 
-  if (!xdp_dbus_impl_language_call_stream_predict_next_sync (language->impl,
-                                                              backend_session_id,
-                                                              arg_prefix,
-                                                              options,
-                                                             NULL,
-                                                             &error))
-    {
-      language_signal_forward_disconnect (forward);
-      g_dbus_method_invocation_return_gerror (invocation, error);
-      return G_DBUS_METHOD_INVOCATION_HANDLED;
-    }
-
-  xdp_dbus_language_complete_stream_predict_next (object, invocation);
+  xdp_dbus_impl_language_call_stream_predict_next (language->impl,
+                                                    backend_session_id,
+                                                    arg_prefix,
+                                                    options,
+                                                    NULL,
+                                                    finish_language_call,
+                                                    forward);
   return G_DBUS_METHOD_INVOCATION_HANDLED;
 }
 
@@ -451,28 +514,22 @@ handle_language_stream_response (XdpDbusLanguage      *object,
   forward = language_signal_forward_new (language,
                                           language->impl,
                                           model_session_get_backend_session_id (model_session),
-                                          session->id);
+                                          session->id,
+                                          invocation,
+                                          LANGUAGE_CALL_STREAM_RESPONSE);
   language_signal_forward_connect_loading (forward);
-  forward->handler_id = g_signal_connect_data (language->impl,
-                                               "token-received",
-                                               G_CALLBACK (forward_token_received),
-                                               forward,
-                                               language_signal_forward_free,
-                                               G_CONNECT_DEFAULT);
+  forward->handler_id = g_signal_connect (language->impl,
+                                          "token-received",
+                                          G_CALLBACK (forward_token_received),
+                                          forward);
 
-  if (!xdp_dbus_impl_language_call_stream_response_sync (language->impl,
-                                                        model_session_get_backend_session_id (model_session),
-                                                        arg_prompt,
-                                                        options,
-                                                        NULL,
-                                                        &error))
-    {
-      language_signal_forward_disconnect (forward);
-      g_dbus_method_invocation_return_gerror (invocation, error);
-      return G_DBUS_METHOD_INVOCATION_HANDLED;
-    }
-
-  xdp_dbus_language_complete_stream_response (object, invocation);
+  xdp_dbus_impl_language_call_stream_response (language->impl,
+                                               model_session_get_backend_session_id (model_session),
+                                               arg_prompt,
+                                               options,
+                                               NULL,
+                                               finish_language_call,
+                                               forward);
   return G_DBUS_METHOD_INVOCATION_HANDLED;
 }
 
@@ -509,34 +566,28 @@ handle_language_stream_respond_guided (XdpDbusLanguage      *object,
   forward = language_signal_forward_new (language,
                                           language->impl,
                                           model_session_get_backend_session_id (model_session),
-                                          session->id);
+                                          session->id,
+                                          invocation,
+                                          LANGUAGE_CALL_STREAM_RESPOND_GUIDED);
   language_signal_forward_connect_loading (forward);
-  forward->handler_id = g_signal_connect_data (language->impl,
-                                               "guided-snapshot-received",
-                                               G_CALLBACK (forward_guided_snapshot_received),
-                                               forward,
-                                               language_signal_forward_free,
-                                               G_CONNECT_DEFAULT);
+  forward->handler_id = g_signal_connect (language->impl,
+                                          "guided-snapshot-received",
+                                          G_CALLBACK (forward_guided_snapshot_received),
+                                          forward);
   forward->sibling_handler_id = g_signal_connect (language->impl,
-                                                 "guided-tool-calls-received",
-                                                 G_CALLBACK (forward_guided_tool_calls_received),
-                                                 forward);
+                                                  "guided-tool-calls-received",
+                                                  G_CALLBACK (forward_guided_tool_calls_received),
+                                                  forward);
 
-  if (!xdp_dbus_impl_language_call_stream_respond_guided_sync (language->impl,
-                                                              model_session_get_backend_session_id (model_session),
-                                                              arg_prompt,
-                                                              arg_fields,
-                                                              arg_tools,
-                                                              options,
-                                                              NULL,
-                                                              &error))
-    {
-      language_signal_forward_disconnect (forward);
-      g_dbus_method_invocation_return_gerror (invocation, error);
-      return G_DBUS_METHOD_INVOCATION_HANDLED;
-    }
-
-  xdp_dbus_language_complete_stream_respond_guided (object, invocation);
+  xdp_dbus_impl_language_call_stream_respond_guided (language->impl,
+                                                     model_session_get_backend_session_id (model_session),
+                                                     arg_prompt,
+                                                     arg_fields,
+                                                     arg_tools,
+                                                     options,
+                                                     NULL,
+                                                     finish_language_call,
+                                                     forward);
   return G_DBUS_METHOD_INVOCATION_HANDLED;
 }
 
@@ -574,35 +625,29 @@ handle_language_stream_submit_tool_results_guided (XdpDbusLanguage      *object,
   forward = language_signal_forward_new (language,
                                           language->impl,
                                           model_session_get_backend_session_id (model_session),
-                                          session->id);
+                                          session->id,
+                                          invocation,
+                                          LANGUAGE_CALL_STREAM_SUBMIT_TOOL_RESULTS_GUIDED);
   language_signal_forward_connect_loading (forward);
-  forward->handler_id = g_signal_connect_data (language->impl,
-                                               "guided-snapshot-received",
-                                               G_CALLBACK (forward_guided_snapshot_received),
-                                               forward,
-                                               language_signal_forward_free,
-                                               G_CONNECT_DEFAULT);
+  forward->handler_id = g_signal_connect (language->impl,
+                                          "guided-snapshot-received",
+                                          G_CALLBACK (forward_guided_snapshot_received),
+                                          forward);
   forward->sibling_handler_id = g_signal_connect (language->impl,
-                                                 "guided-tool-calls-received",
-                                                 G_CALLBACK (forward_guided_tool_calls_received),
-                                                 forward);
+                                                  "guided-tool-calls-received",
+                                                  G_CALLBACK (forward_guided_tool_calls_received),
+                                                  forward);
 
-  if (!xdp_dbus_impl_language_call_stream_submit_tool_results_guided_sync (language->impl,
-                                                                           model_session_get_backend_session_id (model_session),
-                                                                           arg_prompt,
-                                                                           arg_results,
-                                                                           arg_fields,
-                                                                           arg_tools,
-                                                                           options,
-                                                                           NULL,
-                                                                           &error))
-    {
-      language_signal_forward_disconnect (forward);
-      g_dbus_method_invocation_return_gerror (invocation, error);
-      return G_DBUS_METHOD_INVOCATION_HANDLED;
-    }
-
-  xdp_dbus_language_complete_stream_submit_tool_results_guided (object, invocation);
+  xdp_dbus_impl_language_call_stream_submit_tool_results_guided (language->impl,
+                                                                 model_session_get_backend_session_id (model_session),
+                                                                 arg_prompt,
+                                                                 arg_results,
+                                                                 arg_fields,
+                                                                 arg_tools,
+                                                                 options,
+                                                                 NULL,
+                                                                 finish_language_call,
+                                                                 forward);
   return G_DBUS_METHOD_INVOCATION_HANDLED;
 }
 
@@ -616,7 +661,6 @@ handle_language_stream_embed (XdpDbusLanguage      *object,
   Language *language = (Language *) object;
   g_autoptr(XdpSession) session = NULL;
   ModelSession *model_session;
-  g_autoptr(GError) error = NULL;
   LanguageSignalForward *forward;
 
   session = lookup_model_session (invocation, arg_session_handle, MODEL_SESSION_LANGUAGE);
@@ -629,27 +673,21 @@ handle_language_stream_embed (XdpDbusLanguage      *object,
   forward = language_signal_forward_new (language,
                                           language->impl,
                                           model_session_get_backend_session_id (model_session),
-                                          session->id);
+                                          session->id,
+                                          invocation,
+                                          LANGUAGE_CALL_STREAM_EMBED);
   language_signal_forward_connect_loading (forward);
-  forward->handler_id = g_signal_connect_data (language->impl,
-                                               "embedding-received",
-                                               G_CALLBACK (forward_embedding_received),
-                                               forward,
-                                               language_signal_forward_free,
-                                               G_CONNECT_DEFAULT);
+  forward->handler_id = g_signal_connect (language->impl,
+                                          "embedding-received",
+                                          G_CALLBACK (forward_embedding_received),
+                                          forward);
 
-  if (!xdp_dbus_impl_language_call_stream_embed_sync (language->impl,
-                                                      model_session_get_backend_session_id (model_session),
-                                                      arg_text,
-                                                      NULL,
-                                                      &error))
-    {
-      language_signal_forward_disconnect (forward);
-      g_dbus_method_invocation_return_gerror (invocation, error);
-      return G_DBUS_METHOD_INVOCATION_HANDLED;
-    }
-
-  xdp_dbus_language_complete_stream_embed (object, invocation);
+  xdp_dbus_impl_language_call_stream_embed (language->impl,
+                                            model_session_get_backend_session_id (model_session),
+                                            arg_text,
+                                            NULL,
+                                            finish_language_call,
+                                            forward);
   return G_DBUS_METHOD_INVOCATION_HANDLED;
 }
 
