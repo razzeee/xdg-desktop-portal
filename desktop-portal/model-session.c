@@ -7,7 +7,6 @@
 #include "model-session.h"
 
 #include <gio/gio.h>
-#include <string.h>
 
 #include "xdp-app-info.h"
 #include "xdp-context.h"
@@ -232,21 +231,37 @@ generation_options_from_vardict (GVariant  *arg_options,
 static char *
 model_error_name_from_message (const char *error_message)
 {
-  const char *start;
-  const char *end;
+  const char *candidate;
 
   if (error_message == NULL)
     return NULL;
 
-  start = strstr (error_message, "aileron.Inference.");
-  if (start == NULL)
-    return NULL;
+  for (candidate = error_message; *candidate != '\0'; candidate++)
+    {
+      const char *end = candidate;
+      guint components = 0;
 
-  end = start;
-  while (g_ascii_isalnum (*end) || *end == '_' || *end == '.')
-    end++;
+      if (!g_ascii_isalpha (*end) && *end != '_')
+        continue;
 
-  return g_strndup (start, end - start);
+      while (g_ascii_isalpha (*end) || *end == '_')
+        {
+          end++;
+          while (g_ascii_isalnum (*end) || *end == '_')
+            end++;
+
+          components++;
+          if (*end != '.')
+            break;
+
+          end++;
+        }
+
+      if (components >= 3)
+        return g_strndup (candidate, end - candidate);
+    }
+
+  return NULL;
 }
 
 void
