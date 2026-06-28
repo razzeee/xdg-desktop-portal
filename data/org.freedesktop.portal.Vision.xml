@@ -47,7 +47,8 @@
     <!--
         StreamDescribe:
         @session_handle: A ``vision.describe`` session handle returned by CreateSession
-        @image: Base64-encoded PNG or JPEG image bytes
+        @image: Base64-encoded PNG or JPEG image bytes; the encoded payload
+          must fit within the session bus message limit
         @options: Vardict with optional further information
         Natural-language image description tokens are emitted as
         VisionTextReceived signals while this call is in progress.
@@ -62,7 +63,8 @@
     <!--
         StreamOcr:
         @session_handle: A ``vision.ocr`` session handle returned by CreateSession
-        @image: Base64-encoded PNG or JPEG image bytes
+        @image: Base64-encoded PNG or JPEG image bytes; the encoded payload
+          must fit within the session bus message limit
         @options: Vardict with optional further information
         Text extracted from the image is emitted as VisionTextReceived signals
         while this call is in progress.
@@ -77,7 +79,8 @@
     <!--
         StreamSegment:
         @session_handle: A ``vision.segment`` session handle returned by CreateSession
-        @image: Base64-encoded PNG or JPEG image bytes
+        @image: Base64-encoded PNG or JPEG image bytes; the encoded payload
+          must fit within the session bus message limit
         @options: Vardict with optional further information
         Detected objects are emitted as VisionSegmentsReceived signals.
 
