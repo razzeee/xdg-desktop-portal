@@ -27,20 +27,6 @@
       <arg type="s" name="session_id" direction="in"/>
     </method>
 
-    <method name="Respond">
-      <arg type="s" name="session_id" direction="in"/>
-      <arg type="s" name="prompt" direction="in"/>
-      <arg type="(xdsss)" name="options" direction="in"/>
-      <arg type="s" name="content" direction="out"/>
-    </method>
-
-    <method name="PredictNext">
-      <arg type="s" name="session_id" direction="in"/>
-      <arg type="s" name="prefix" direction="in"/>
-      <arg type="(xdsss)" name="options" direction="in"/>
-      <arg type="as" name="completions" direction="out"/>
-    </method>
-
     <!-- Stream payloads are emitted as TokenReceived signals while this call is in progress. -->
     <method name="StreamResponse">
       <arg type="s" name="session_id" direction="in"/>
@@ -48,14 +34,11 @@
       <arg type="(xdsss)" name="options" direction="in"/>
     </method>
 
-    <method name="RespondGuided">
+    <!-- Stream payloads are emitted as PredictionReceived signals while this call is in progress. -->
+    <method name="StreamPredictNext">
       <arg type="s" name="session_id" direction="in"/>
-      <arg type="s" name="prompt" direction="in"/>
-      <arg type="a(sssb)" name="fields" direction="in"/>
-      <arg type="a(sss)" name="tools" direction="in"/>
+      <arg type="s" name="prefix" direction="in"/>
       <arg type="(xdsss)" name="options" direction="in"/>
-      <arg type="s" name="content" direction="out"/>
-      <arg type="a(sss)" name="tool_calls" direction="out"/>
     </method>
 
     <!-- Stream payloads are emitted as GuidedSnapshotReceived signals while this call is in progress. -->
@@ -67,21 +50,18 @@
       <arg type="(xdsss)" name="options" direction="in"/>
     </method>
 
-    <method name="SubmitToolResultsGuided">
+    <method name="StreamSubmitToolResultsGuided">
       <arg type="s" name="session_id" direction="in"/>
       <arg type="s" name="prompt" direction="in"/>
       <arg type="a(sss)" name="results" direction="in"/>
       <arg type="a(sssb)" name="fields" direction="in"/>
       <arg type="a(sss)" name="tools" direction="in"/>
       <arg type="(xdsss)" name="options" direction="in"/>
-      <arg type="s" name="content" direction="out"/>
-      <arg type="a(sss)" name="tool_calls" direction="out"/>
     </method>
 
-    <method name="Embed">
+    <method name="StreamEmbed">
       <arg type="s" name="session_id" direction="in"/>
       <arg type="s" name="text" direction="in"/>
-      <arg type="ad" name="embedding" direction="out"/>
     </method>
 
     <method name="EndSession">
@@ -98,6 +78,12 @@
       <arg type="b" name="done"/>
     </signal>
 
+    <signal name="PredictionReceived">
+      <arg type="s" name="session_id"/>
+      <arg type="s" name="completion"/>
+      <arg type="b" name="done"/>
+    </signal>
+
     <signal name="GuidedSnapshotReceived">
       <arg type="s" name="session_id"/>
       <arg type="s" name="snapshot_json"/>
@@ -107,6 +93,12 @@
     <signal name="GuidedToolCallsReceived">
       <arg type="s" name="session_id"/>
       <arg type="a(sss)" name="tool_calls"/>
+      <arg type="b" name="done"/>
+    </signal>
+
+    <signal name="EmbeddingReceived">
+      <arg type="s" name="session_id"/>
+      <arg type="ad" name="embedding"/>
       <arg type="b" name="done"/>
     </signal>
 

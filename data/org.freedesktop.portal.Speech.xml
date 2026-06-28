@@ -9,7 +9,7 @@
       org.freedesktop.portal.Speech:
       @short_description: Portal for local speech model tasks
 
-      This documentation describes version 1 of this interface.
+      This documentation describes version 2 of this interface.
   -->
   <interface name="org.freedesktop.portal.Speech">
     <method name="GetUseCaseAvailability">
@@ -27,8 +27,8 @@
         @options: Vardict with optional further information
         @session_handle: Object path for the :ref:`org.freedesktop.portal.Session` object
 
-        The session @use_case selects whether Transcribe and StreamTranscribe
-        return a verbatim source-language transcript or an English translation.
+        The session @use_case selects whether StreamTranscribe returns a
+        verbatim source-language transcript or an English translation.
     -->
     <method name="CreateSession">
       <arg type="s" name="use_case" direction="in"/>
@@ -45,35 +45,10 @@
     </method>
 
     <!--
-        Transcribe:
-        @session_handle: A speech session handle returned by CreateSession
-        @audio: Base64-encoded raw 16 kHz mono f32le PCM audio
-        @source_language_hint: Optional hint for the spoken input language,
-          such as an ISO 639-1 code like ``de``; pass an empty string for
-          auto-detect/no hint
-        @options: Vardict with optional further information
-        @text: Transcript or translation text
-
-        For sessions created with ``speech.transcribe``, returns a verbatim
-        transcript in the source language. For sessions created with
-        ``speech.translate``, returns an English translation. The
-        @source_language_hint argument only describes the input language; it
-        does not select translation mode or target language.
-    -->
-    <method name="Transcribe">
-      <arg type="o" name="session_handle" direction="in"/>
-      <arg type="s" name="audio" direction="in"/>
-      <arg type="s" name="source_language_hint" direction="in"/>
-      <annotation name="org.qtproject.QtDBus.QtTypeName.In3" value="QVariantMap"/>
-      <arg type="a{sv}" name="options" direction="in"/>
-      <arg type="s" name="text" direction="out"/>
-    </method>
-
-    <!--
         StreamTranscribe:
 
         Starts streaming transcription or translation segments. The @audio and
-        @source_language_hint arguments have the same meaning as Transcribe.
+        @source_language_hint is the optional spoken input language hint.
         Segments are emitted as TranscriptionReceived signals for
         @session_handle while the method call is in progress; the method reply
         only indicates that streaming has finished. Clients should subscribe

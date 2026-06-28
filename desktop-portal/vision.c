@@ -43,6 +43,98 @@ G_DEFINE_TYPE_WITH_CODE (Vision, vision, XDP_DBUS_TYPE_VISION_SKELETON,
 
 G_DEFINE_AUTOPTR_CLEANUP_FUNC (Vision, g_object_unref)
 
+typedef struct _VisionSignalForward
+{
+  Vision *vision;
+  XdpDbusImplVision *impl;
+  char *backend_session_id;
+  char *session_handle;
+  gulong handler_id;
+} VisionSignalForward;
+
+static VisionSignalForward *
+vision_signal_forward_new (Vision            *vision,
+                           XdpDbusImplVision *impl,
+                           const char        *backend_session_id,
+                           const char        *session_handle)
+{
+  VisionSignalForward *forward = g_new0 (VisionSignalForward, 1);
+
+  forward->vision = g_object_ref (vision);
+  forward->impl = g_object_ref (impl);
+  forward->backend_session_id = g_strdup (backend_session_id);
+  forward->session_handle = g_strdup (session_handle);
+
+  return forward;
+}
+
+static void
+vision_signal_forward_free (gpointer  data,
+                            GClosure *closure)
+{
+  VisionSignalForward *forward = data;
+
+  g_clear_object (&forward->vision);
+  g_clear_object (&forward->impl);
+  g_clear_pointer (&forward->backend_session_id, g_free);
+  g_clear_pointer (&forward->session_handle, g_free);
+  g_free (forward);
+}
+
+static void
+vision_signal_forward_disconnect (VisionSignalForward *forward)
+{
+  XdpDbusImplVision *impl = forward->impl;
+  gulong handler_id = forward->handler_id;
+
+  forward->handler_id = 0;
+
+  if (handler_id != 0)
+    g_signal_handler_disconnect (impl, handler_id);
+}
+
+static void
+forward_vision_text_received (XdpDbusImplVision *impl,
+                              const char        *session_id,
+                              const char        *text,
+                              gboolean           done,
+                              gpointer           user_data)
+{
+  VisionSignalForward *forward = user_data;
+
+  if (g_strcmp0 (session_id, forward->backend_session_id) != 0)
+    return;
+
+  xdp_dbus_vision_emit_vision_text_received (XDP_DBUS_VISION (forward->vision),
+                                              forward->session_handle,
+                                              text,
+                                              done);
+
+  if (done)
+    vision_signal_forward_disconnect (forward);
+}
+
+static void
+forward_vision_segments_received (XdpDbusImplVision *impl,
+                                  const char        *session_id,
+                                  GVariant          *segments,
+                                  gboolean           done,
+                                  gpointer           user_data)
+{
+  VisionSignalForward *forward = user_data;
+
+  if (g_strcmp0 (session_id, forward->backend_session_id) != 0)
+    return;
+
+  xdp_dbus_vision_emit_vision_segments_received (XDP_DBUS_VISION (forward->vision),
+                                                  forward->session_handle,
+                                                  segments,
+                                                  done);
+
+  if (done)
+    vision_signal_forward_disconnect (forward);
+}
+
 static gboolean
 handle_vision_get_use_case_availability (XdpDbusVision       *object,
                                          GDBusMethodInvocation *invocation,
@@ -156,17 +248,17 @@ handle_vision_prewarm (XdpDbusVision       *object,
 }
 
 static gboolean
-handle_vision_describe (XdpDbusVision       *object,
-                        GDBusMethodInvocation *invocation,
-                        const char            *arg_session_handle,
-                        const char            *arg_image,
-                        GVariant              *arg_options)
+handle_vision_stream_describe (XdpDbusVision       *object,
+                               GDBusMethodInvocation *invocation,
+                               const char            *arg_session_handle,
+                               const char            *arg_image,
+                               GVariant              *arg_options)
 {
   Vision *vision = (Vision *) object;
   g_autoptr(XdpSession) session = NULL;
   ModelSession *model_session;
-  g_autofree char *text = NULL;
   g_autoptr(GError) error = NULL;
+  VisionSignalForward *forward;
 
   session = lookup_model_session (invocation, arg_session_handle, MODEL_SESSION_VISION);
   if (session == NULL)
@@ -175,33 +267,44 @@ handle_vision_describe (XdpDbusVision       *object,
   SESSION_AUTOLOCK (session);
   model_session = MODEL_SESSION (session);
 
-  if (!xdp_dbus_impl_vision_call_describe_sync (vision->impl,
-                                               model_session_get_backend_session_id (model_session),
-                                               arg_image,
-                                               &text,
-                                               NULL,
-                                               &error))
+  forward = vision_signal_forward_new (vision,
+                                       vision->impl,
+                                       model_session_get_backend_session_id (model_session),
+                                       session->id);
+  forward->handler_id = g_signal_connect_data (vision->impl,
+                                               "vision-text-received",
+                                               G_CALLBACK (forward_vision_text_received),
+                                               forward,
+                                               vision_signal_forward_free,
+                                               G_CONNECT_DEFAULT);
+
+  if (!xdp_dbus_impl_vision_call_stream_describe_sync (vision->impl,
+                                                       model_session_get_backend_session_id (model_session),
+                                                       arg_image,
+                                                       NULL,
+                                                       &error))
     {
+      vision_signal_forward_disconnect (forward);
       g_dbus_method_invocation_return_gerror (invocation, error);
       return G_DBUS_METHOD_INVOCATION_HANDLED;
     }
 
-  xdp_dbus_vision_complete_describe (object, invocation, text);
+  xdp_dbus_vision_complete_stream_describe (object, invocation);
   return G_DBUS_METHOD_INVOCATION_HANDLED;
 }
 
 static gboolean
-handle_vision_ocr (XdpDbusVision       *object,
-                   GDBusMethodInvocation *invocation,
-                   const char            *arg_session_handle,
-                   const char            *arg_image,
-                   GVariant              *arg_options)
+handle_vision_stream_ocr (XdpDbusVision       *object,
+                          GDBusMethodInvocation *invocation,
+                          const char            *arg_session_handle,
+                          const char            *arg_image,
+                          GVariant              *arg_options)
 {
   Vision *vision = (Vision *) object;
   g_autoptr(XdpSession) session = NULL;
   ModelSession *model_session;
-  g_autofree char *text = NULL;
   g_autoptr(GError) error = NULL;
+  VisionSignalForward *forward;
 
   session = lookup_model_session (invocation, arg_session_handle, MODEL_SESSION_VISION);
   if (session == NULL)
@@ -210,33 +313,44 @@ handle_vision_ocr (XdpDbusVision       *object,
   SESSION_AUTOLOCK (session);
   model_session = MODEL_SESSION (session);
 
-  if (!xdp_dbus_impl_vision_call_ocr_sync (vision->impl,
-                                          model_session_get_backend_session_id (model_session),
-                                          arg_image,
-                                          &text,
-                                          NULL,
-                                          &error))
+  forward = vision_signal_forward_new (vision,
+                                       vision->impl,
+                                       model_session_get_backend_session_id (model_session),
+                                       session->id);
+  forward->handler_id = g_signal_connect_data (vision->impl,
+                                               "vision-text-received",
+                                               G_CALLBACK (forward_vision_text_received),
+                                               forward,
+                                               vision_signal_forward_free,
+                                               G_CONNECT_DEFAULT);
+
+  if (!xdp_dbus_impl_vision_call_stream_ocr_sync (vision->impl,
+                                                  model_session_get_backend_session_id (model_session),
+                                                  arg_image,
+                                                  NULL,
+                                                  &error))
     {
+      vision_signal_forward_disconnect (forward);
       g_dbus_method_invocation_return_gerror (invocation, error);
       return G_DBUS_METHOD_INVOCATION_HANDLED;
     }
 
-  xdp_dbus_vision_complete_ocr (object, invocation, text);
+  xdp_dbus_vision_complete_stream_ocr (object, invocation);
   return G_DBUS_METHOD_INVOCATION_HANDLED;
 }
 
 static gboolean
-handle_vision_segment (XdpDbusVision       *object,
-                       GDBusMethodInvocation *invocation,
-                       const char            *arg_session_handle,
-                       const char            *arg_image,
-                       GVariant              *arg_options)
+handle_vision_stream_segment (XdpDbusVision       *object,
+                              GDBusMethodInvocation *invocation,
+                              const char            *arg_session_handle,
+                              const char            *arg_image,
+                              GVariant              *arg_options)
 {
   Vision *vision = (Vision *) object;
   g_autoptr(XdpSession) session = NULL;
   ModelSession *model_session;
-  g_autoptr(GVariant) segments = NULL;
   g_autoptr(GError) error = NULL;
+  VisionSignalForward *forward;
 
   session = lookup_model_session (invocation, arg_session_handle, MODEL_SESSION_VISION);
   if (session == NULL)
@@ -245,18 +359,29 @@ handle_vision_segment (XdpDbusVision       *object,
   SESSION_AUTOLOCK (session);
   model_session = MODEL_SESSION (session);
 
-  if (!xdp_dbus_impl_vision_call_segment_sync (vision->impl,
-                                              model_session_get_backend_session_id (model_session),
-                                              arg_image,
-                                              &segments,
-                                              NULL,
-                                              &error))
+  forward = vision_signal_forward_new (vision,
+                                       vision->impl,
+                                       model_session_get_backend_session_id (model_session),
+                                       session->id);
+  forward->handler_id = g_signal_connect_data (vision->impl,
+                                               "vision-segments-received",
+                                               G_CALLBACK (forward_vision_segments_received),
+                                               forward,
+                                               vision_signal_forward_free,
+                                               G_CONNECT_DEFAULT);
+
+  if (!xdp_dbus_impl_vision_call_stream_segment_sync (vision->impl,
+                                                      model_session_get_backend_session_id (model_session),
+                                                      arg_image,
+                                                      NULL,
+                                                      &error))
     {
+      vision_signal_forward_disconnect (forward);
       g_dbus_method_invocation_return_gerror (invocation, error);
       return G_DBUS_METHOD_INVOCATION_HANDLED;
     }
 
-  xdp_dbus_vision_complete_segment (object, invocation, segments);
+  xdp_dbus_vision_complete_stream_segment (object, invocation);
   return G_DBUS_METHOD_INVOCATION_HANDLED;
 }
 
@@ -266,9 +391,9 @@ vision_iface_init (XdpDbusVisionIface *iface)
   iface->handle_get_use_case_availability = handle_vision_get_use_case_availability;
   iface->handle_create_session = handle_vision_create_session;
   iface->handle_prewarm = handle_vision_prewarm;
-  iface->handle_describe = handle_vision_describe;
-  iface->handle_ocr = handle_vision_ocr;
-  iface->handle_segment = handle_vision_segment;
+  iface->handle_stream_describe = handle_vision_stream_describe;
+  iface->handle_stream_ocr = handle_vision_stream_ocr;
+  iface->handle_stream_segment = handle_vision_stream_segment;
 }
 
 static void
@@ -303,7 +428,7 @@ vision_new (XdpContext        *context,
   vision->context = context;
   vision->impl = g_object_ref (impl);
   g_dbus_proxy_set_default_timeout (G_DBUS_PROXY (vision->impl), G_MAXINT);
-  xdp_dbus_vision_set_version (XDP_DBUS_VISION (vision), 1);
+  xdp_dbus_vision_set_version (XDP_DBUS_VISION (vision), 2);
 
   return vision;
 }

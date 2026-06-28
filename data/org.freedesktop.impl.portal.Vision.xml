@@ -36,39 +36,38 @@
     </method>
 
     <!--
-        Describe:
+        StreamDescribe:
         @image: Base64-encoded PNG or JPEG image bytes
-        @text: Natural-language image description
+        Natural-language image description tokens are emitted as
+        VisionTextReceived signals while this call is in progress.
     -->
-    <method name="Describe">
+    <method name="StreamDescribe">
       <arg type="s" name="session_id" direction="in"/>
       <arg type="s" name="image" direction="in"/>
-      <arg type="s" name="text" direction="out"/>
     </method>
 
     <!--
-        Ocr:
+        StreamOcr:
         @image: Base64-encoded PNG or JPEG image bytes
-        @text: Text extracted from the image
+        Text extracted from the image is emitted as VisionTextReceived signals
+        while this call is in progress.
     -->
-    <method name="Ocr">
+    <method name="StreamOcr">
       <arg type="s" name="session_id" direction="in"/>
       <arg type="s" name="image" direction="in"/>
-      <arg type="s" name="text" direction="out"/>
     </method>
 
     <!--
-        Segment:
+        StreamSegment:
         @image: Base64-encoded PNG or JPEG image bytes
-        @segments: Detected objects as ``(label, confidence, x, y, width, height)``
+        Detected objects are emitted as VisionSegmentsReceived signals.
 
         Segment coordinates are normalized rectangles in the ``0.0..1.0``
         range relative to the image dimensions.
     -->
-    <method name="Segment">
+    <method name="StreamSegment">
       <arg type="s" name="session_id" direction="in"/>
       <arg type="s" name="image" direction="in"/>
-      <arg type="a(sddddd)" name="segments" direction="out"/>
     </method>
 
     <method name="EndSession">
@@ -77,6 +76,18 @@
 
     <signal name="ModelLoading">
       <arg type="s" name="message"/>
+    </signal>
+
+    <signal name="VisionTextReceived">
+      <arg type="s" name="session_id"/>
+      <arg type="s" name="text"/>
+      <arg type="b" name="done"/>
+    </signal>
+
+    <signal name="VisionSegmentsReceived">
+      <arg type="s" name="session_id"/>
+      <arg type="a(sddddd)" name="segments"/>
+      <arg type="b" name="done"/>
     </signal>
 
     <property name="version" type="u" access="read"/>

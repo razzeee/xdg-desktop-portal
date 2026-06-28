@@ -46,9 +46,52 @@ G_DEFINE_AUTOPTR_CLEANUP_FUNC (Speech, g_object_unref)
 typedef struct _SpeechSignalForward
 {
   Speech *speech;
-  const char *backend_session_id;
-  const char *session_handle;
+  XdpDbusImplSpeech *impl;
+  char *backend_session_id;
+  char *session_handle;
+  gulong handler_id;
 } SpeechSignalForward;
+
+static SpeechSignalForward *
+speech_signal_forward_new (Speech            *speech,
+                           XdpDbusImplSpeech *impl,
+                           const char        *backend_session_id,
+                           const char        *session_handle)
+{
+  SpeechSignalForward *forward = g_new0 (SpeechSignalForward, 1);
+
+  forward->speech = g_object_ref (speech);
+  forward->impl = g_object_ref (impl);
+  forward->backend_session_id = g_strdup (backend_session_id);
+  forward->session_handle = g_strdup (session_handle);
+
+  return forward;
+}
+
+static void
+speech_signal_forward_free (gpointer  data,
+                            GClosure *closure)
+{
+  SpeechSignalForward *forward = data;
+
+  g_clear_object (&forward->speech);
+  g_clear_object (&forward->impl);
+  g_clear_pointer (&forward->backend_session_id, g_free);
+  g_clear_pointer (&forward->session_handle, g_free);
+  g_free (forward);
+}
+
+static void
+speech_signal_forward_disconnect (SpeechSignalForward *forward)
+{
+  XdpDbusImplSpeech *impl = forward->impl;
+  gulong handler_id = forward->handler_id;
+
+  forward->handler_id = 0;
+
+  if (handler_id != 0)
+    g_signal_handler_disconnect (impl, handler_id);
+}
 
 static void
 forward_transcription_received (XdpDbusImplSpeech *impl,
@@ -63,9 +106,12 @@ forward_transcription_received (XdpDbusImplSpeech *impl,
     return;
 
   xdp_dbus_speech_emit_transcription_received (XDP_DBUS_SPEECH (forward->speech),
-                                               forward->session_handle,
-                                               text,
-                                               done);
+                                                forward->session_handle,
+                                                text,
+                                                done);
+
+  if (done)
+    speech_signal_forward_disconnect (forward);
 }
 
 static gboolean
@@ -181,43 +227,6 @@ handle_speech_prewarm (XdpDbusSpeech       *object,
 }
 
 static gboolean
-handle_speech_transcribe (XdpDbusSpeech       *object,
-                          GDBusMethodInvocation *invocation,
-                          const char            *arg_session_handle,
-                          const char            *arg_audio,
-                          const char            *arg_source_language_hint,
-                          GVariant              *arg_options)
-{
-  Speech *speech = (Speech *) object;
-  g_autoptr(XdpSession) session = NULL;
-  ModelSession *model_session;
-  g_autofree char *text = NULL;
-  g_autoptr(GError) error = NULL;
-
-  session = lookup_model_session (invocation, arg_session_handle, MODEL_SESSION_SPEECH);
-  if (session == NULL)
-    return G_DBUS_METHOD_INVOCATION_HANDLED;
-
-  SESSION_AUTOLOCK (session);
-  model_session = MODEL_SESSION (session);
-
-  if (!xdp_dbus_impl_speech_call_transcribe_sync (speech->impl,
-                                                 model_session_get_backend_session_id (model_session),
-                                                 arg_audio,
-                                                  arg_source_language_hint,
-                                                 &text,
-                                                 NULL,
-                                                 &error))
-    {
-      g_dbus_method_invocation_return_gerror (invocation, error);
-      return G_DBUS_METHOD_INVOCATION_HANDLED;
-    }
-
-  xdp_dbus_speech_complete_transcribe (object, invocation, text);
-  return G_DBUS_METHOD_INVOCATION_HANDLED;
-}
-
-static gboolean
 handle_speech_stream_transcribe (XdpDbusSpeech       *object,
                                  GDBusMethodInvocation *invocation,
                                  const char            *arg_session_handle,
@@ -229,8 +238,7 @@ handle_speech_stream_transcribe (XdpDbusSpeech       *object,
   g_autoptr(XdpSession) session = NULL;
   ModelSession *model_session;
   g_autoptr(GError) error = NULL;
-  SpeechSignalForward forward;
-  gulong handler_id;
+  SpeechSignalForward *forward;
 
   session = lookup_model_session (invocation, arg_session_handle, MODEL_SESSION_SPEECH);
   if (session == NULL)
@@ -240,13 +248,16 @@ handle_speech_stream_transcribe (XdpDbusSpeech       *object,
   model_session = MODEL_SESSION (session);
   xdp_dbus_speech_emit_model_loading (object, session->id, "starting model");
 
-  forward.speech = speech;
-  forward.backend_session_id = model_session_get_backend_session_id (model_session);
-  forward.session_handle = session->id;
-  handler_id = g_signal_connect (speech->impl,
-                                 "transcription-received",
-                                 G_CALLBACK (forward_transcription_received),
-                                 &forward);
+  forward = speech_signal_forward_new (speech,
+                                       speech->impl,
+                                       model_session_get_backend_session_id (model_session),
+                                       session->id);
+  forward->handler_id = g_signal_connect_data (speech->impl,
+                                               "transcription-received",
+                                               G_CALLBACK (forward_transcription_received),
+                                               forward,
+                                               speech_signal_forward_free,
+                                               G_CONNECT_DEFAULT);
 
   if (!xdp_dbus_impl_speech_call_stream_transcribe_sync (speech->impl,
                                                         model_session_get_backend_session_id (model_session),
@@ -255,12 +266,11 @@ handle_speech_stream_transcribe (XdpDbusSpeech       *object,
                                                         NULL,
                                                         &error))
     {
-      g_signal_handler_disconnect (speech->impl, handler_id);
+      speech_signal_forward_disconnect (forward);
       g_dbus_method_invocation_return_gerror (invocation, error);
       return G_DBUS_METHOD_INVOCATION_HANDLED;
     }
 
-  g_signal_handler_disconnect (speech->impl, handler_id);
   xdp_dbus_speech_complete_stream_transcribe (object, invocation);
   return G_DBUS_METHOD_INVOCATION_HANDLED;
 }
@@ -271,7 +281,6 @@ speech_iface_init (XdpDbusSpeechIface *iface)
   iface->handle_get_use_case_availability = handle_speech_get_use_case_availability;
   iface->handle_create_session = handle_speech_create_session;
   iface->handle_prewarm = handle_speech_prewarm;
-  iface->handle_transcribe = handle_speech_transcribe;
   iface->handle_stream_transcribe = handle_speech_stream_transcribe;
 }
 
@@ -307,7 +316,7 @@ speech_new (XdpContext        *context,
   speech->context = context;
   speech->impl = g_object_ref (impl);
   g_dbus_proxy_set_default_timeout (G_DBUS_PROXY (speech->impl), G_MAXINT);
-  xdp_dbus_speech_set_version (XDP_DBUS_SPEECH (speech), 1);
+  xdp_dbus_speech_set_version (XDP_DBUS_SPEECH (speech), 2);
 
   return speech;
 }
