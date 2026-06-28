@@ -26,6 +26,7 @@ ModelSession *model_session_new (XdpContext       *context,
                                  XdpAppInfo       *app_info,
                                  GObject          *impl,
                                  ModelSessionKind  kind,
+                                 GVariant         *options,
                                  const char       *backend_session_id,
                                  GError          **error);
 
@@ -37,6 +38,15 @@ const char *model_session_get_backend_session_id (ModelSession *session);
 
 GVariant *generation_options_from_vardict (GVariant  *arg_options,
                                            GError   **error);
+
+void model_request_emit_response (XdpRequest  *request,
+                                  guint        response,
+                                  const char  *error_message);
+
+void model_request_emit_session_response (XdpRequest  *request,
+                                          const char  *session_handle);
+
+gboolean model_request_is_exported (XdpRequest *request);
 
 void end_backend_session (GObject          *impl,
                           ModelSessionKind  kind,

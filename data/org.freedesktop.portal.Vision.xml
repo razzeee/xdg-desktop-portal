@@ -25,23 +25,26 @@
           ``vision.ocr`` for text extraction, or ``vision.segment`` for object boxes
         @instructions: Stable system instructions for this session
         @options: Vardict with optional further information
-        @session_handle: Object path for the :ref:`org.freedesktop.portal.Session` object
+        @handle: Object path for the :ref:`org.freedesktop.portal.Request` object representing this call
 
         The session @use_case selects which vision operation is permitted for
-        the session. Create separate sessions for different vision tasks.
+        the session. Create separate sessions for different vision tasks. The
+        session handle is returned in the Request response under the
+        ``session_handle`` key.
     -->
     <method name="CreateSession">
       <arg type="s" name="use_case" direction="in"/>
       <arg type="s" name="instructions" direction="in"/>
       <annotation name="org.qtproject.QtDBus.QtTypeName.In2" value="QVariantMap"/>
       <arg type="a{sv}" name="options" direction="in"/>
-      <arg type="o" name="session_handle" direction="out"/>
+      <arg type="o" name="handle" direction="out"/>
     </method>
 
     <method name="Prewarm">
       <arg type="o" name="session_handle" direction="in"/>
       <annotation name="org.qtproject.QtDBus.QtTypeName.In1" value="QVariantMap"/>
       <arg type="a{sv}" name="options" direction="in"/>
+      <arg type="o" name="handle" direction="out"/>
     </method>
 
     <!--
@@ -58,6 +61,7 @@
       <arg type="s" name="image" direction="in"/>
       <annotation name="org.qtproject.QtDBus.QtTypeName.In2" value="QVariantMap"/>
       <arg type="a{sv}" name="options" direction="in"/>
+      <arg type="o" name="handle" direction="out"/>
     </method>
 
     <!--
@@ -74,6 +78,7 @@
       <arg type="s" name="image" direction="in"/>
       <annotation name="org.qtproject.QtDBus.QtTypeName.In2" value="QVariantMap"/>
       <arg type="a{sv}" name="options" direction="in"/>
+      <arg type="o" name="handle" direction="out"/>
     </method>
 
     <!--
@@ -92,20 +97,24 @@
       <arg type="s" name="image" direction="in"/>
       <annotation name="org.qtproject.QtDBus.QtTypeName.In2" value="QVariantMap"/>
       <arg type="a{sv}" name="options" direction="in"/>
+      <arg type="o" name="handle" direction="out"/>
     </method>
 
     <signal name="ModelLoading">
+      <arg type="o" name="request_handle"/>
       <arg type="o" name="session_handle"/>
       <arg type="s" name="message"/>
     </signal>
 
     <signal name="VisionTextReceived">
+      <arg type="o" name="request_handle"/>
       <arg type="o" name="session_handle"/>
       <arg type="s" name="text"/>
       <arg type="b" name="done"/>
     </signal>
 
     <signal name="VisionSegmentsReceived">
+      <arg type="o" name="request_handle"/>
       <arg type="o" name="session_handle"/>
       <arg type="a(sddddd)" name="segments"/>
       <arg type="b" name="done"/>

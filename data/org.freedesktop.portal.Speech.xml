@@ -25,23 +25,26 @@
           or ``speech.translate`` for speech-to-English translation
         @instructions: Stable system instructions for this session
         @options: Vardict with optional further information
-        @session_handle: Object path for the :ref:`org.freedesktop.portal.Session` object
+        @handle: Object path for the :ref:`org.freedesktop.portal.Request` object representing this call
 
         The session @use_case selects whether StreamTranscribe returns a
-        verbatim source-language transcript or an English translation.
+        verbatim source-language transcript or an English translation. The
+        session handle is returned in the Request response under the
+        ``session_handle`` key.
     -->
     <method name="CreateSession">
       <arg type="s" name="use_case" direction="in"/>
       <arg type="s" name="instructions" direction="in"/>
       <annotation name="org.qtproject.QtDBus.QtTypeName.In2" value="QVariantMap"/>
       <arg type="a{sv}" name="options" direction="in"/>
-      <arg type="o" name="session_handle" direction="out"/>
+      <arg type="o" name="handle" direction="out"/>
     </method>
 
     <method name="Prewarm">
       <arg type="o" name="session_handle" direction="in"/>
       <annotation name="org.qtproject.QtDBus.QtTypeName.In1" value="QVariantMap"/>
       <arg type="a{sv}" name="options" direction="in"/>
+      <arg type="o" name="handle" direction="out"/>
     </method>
 
     <!--
@@ -62,14 +65,17 @@
       <arg type="s" name="source_language_hint" direction="in"/>
       <annotation name="org.qtproject.QtDBus.QtTypeName.In3" value="QVariantMap"/>
       <arg type="a{sv}" name="options" direction="in"/>
+      <arg type="o" name="handle" direction="out"/>
     </method>
 
     <signal name="ModelLoading">
+      <arg type="o" name="request_handle"/>
       <arg type="o" name="session_handle"/>
       <arg type="s" name="message"/>
     </signal>
 
     <signal name="TranscriptionReceived">
+      <arg type="o" name="request_handle"/>
       <arg type="o" name="session_handle"/>
       <arg type="s" name="text"/>
       <arg type="b" name="done"/>

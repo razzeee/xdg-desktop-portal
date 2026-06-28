@@ -32,6 +32,7 @@
     </method>
 
     <method name="Prewarm">
+      <arg type="s" name="request_id" direction="in"/>
       <arg type="s" name="session_id" direction="in"/>
     </method>
 
@@ -42,6 +43,7 @@
         VisionTextReceived signals while this call is in progress.
     -->
     <method name="StreamDescribe">
+      <arg type="s" name="request_id" direction="in"/>
       <arg type="s" name="session_id" direction="in"/>
       <arg type="s" name="image" direction="in"/>
     </method>
@@ -53,6 +55,7 @@
         while this call is in progress.
     -->
     <method name="StreamOcr">
+      <arg type="s" name="request_id" direction="in"/>
       <arg type="s" name="session_id" direction="in"/>
       <arg type="s" name="image" direction="in"/>
     </method>
@@ -66,6 +69,7 @@
         range relative to the image dimensions.
     -->
     <method name="StreamSegment">
+      <arg type="s" name="request_id" direction="in"/>
       <arg type="s" name="session_id" direction="in"/>
       <arg type="s" name="image" direction="in"/>
     </method>
@@ -75,17 +79,20 @@
     </method>
 
     <signal name="ModelLoading">
+      <arg type="s" name="request_id"/>
       <arg type="s" name="session_id"/>
       <arg type="s" name="message"/>
     </signal>
 
     <signal name="VisionTextReceived">
+      <arg type="s" name="request_id"/>
       <arg type="s" name="session_id"/>
       <arg type="s" name="text"/>
       <arg type="b" name="done"/>
     </signal>
 
     <signal name="VisionSegmentsReceived">
+      <arg type="s" name="request_id"/>
       <arg type="s" name="session_id"/>
       <arg type="a(sddddd)" name="segments"/>
       <arg type="b" name="done"/>

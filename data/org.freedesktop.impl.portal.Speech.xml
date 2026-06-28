@@ -32,6 +32,7 @@
     </method>
 
     <method name="Prewarm">
+      <arg type="s" name="request_id" direction="in"/>
       <arg type="s" name="session_id" direction="in"/>
     </method>
 
@@ -44,6 +45,7 @@
         is in progress.
     -->
     <method name="StreamTranscribe">
+      <arg type="s" name="request_id" direction="in"/>
       <arg type="s" name="session_id" direction="in"/>
       <arg type="s" name="audio" direction="in"/>
       <arg type="s" name="source_language_hint" direction="in"/>
@@ -54,11 +56,13 @@
     </method>
 
     <signal name="ModelLoading">
+      <arg type="s" name="request_id"/>
       <arg type="s" name="session_id"/>
       <arg type="s" name="message"/>
     </signal>
 
     <signal name="TranscriptionReceived">
+      <arg type="s" name="request_id"/>
       <arg type="s" name="session_id"/>
       <arg type="s" name="text"/>
       <arg type="b" name="done"/>

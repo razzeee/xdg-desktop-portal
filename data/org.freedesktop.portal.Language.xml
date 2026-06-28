@@ -35,23 +35,25 @@
         @use_case: Task token beginning with ``language.``
         @instructions: Stable system instructions for this session
         @options: Vardict with optional further information
-        @session_handle: Object path for the :ref:`org.freedesktop.portal.Session` object
+        @handle: Object path for the :ref:`org.freedesktop.portal.Request` object representing this call
 
-        Creates a language model session. The portal generates @session_handle;
-        clients cannot choose the session handle token.
+        Creates a language model session. The session handle is returned in
+        the :ref:`org.freedesktop.portal.Request::Response` signal using the
+        ``session_handle`` key.
     -->
     <method name="CreateSession">
       <arg type="s" name="use_case" direction="in"/>
       <arg type="s" name="instructions" direction="in"/>
       <annotation name="org.qtproject.QtDBus.QtTypeName.In2" value="QVariantMap"/>
       <arg type="a{sv}" name="options" direction="in"/>
-      <arg type="o" name="session_handle" direction="out"/>
+      <arg type="o" name="handle" direction="out"/>
     </method>
 
     <method name="Prewarm">
       <arg type="o" name="session_handle" direction="in"/>
       <annotation name="org.qtproject.QtDBus.QtTypeName.In1" value="QVariantMap"/>
       <arg type="a{sv}" name="options" direction="in"/>
+      <arg type="o" name="handle" direction="out"/>
     </method>
 
     <!--
@@ -68,6 +70,7 @@
       <arg type="s" name="prompt" direction="in"/>
       <annotation name="org.qtproject.QtDBus.QtTypeName.In2" value="QVariantMap"/>
       <arg type="a{sv}" name="options" direction="in"/>
+      <arg type="o" name="handle" direction="out"/>
     </method>
 
     <!--
@@ -81,6 +84,7 @@
       <arg type="s" name="prefix" direction="in"/>
       <annotation name="org.qtproject.QtDBus.QtTypeName.In2" value="QVariantMap"/>
       <arg type="a{sv}" name="options" direction="in"/>
+      <arg type="o" name="handle" direction="out"/>
     </method>
 
     <!--
@@ -99,6 +103,7 @@
       <arg type="a(sss)" name="tools" direction="in"/>
       <annotation name="org.qtproject.QtDBus.QtTypeName.In4" value="QVariantMap"/>
       <arg type="a{sv}" name="options" direction="in"/>
+      <arg type="o" name="handle" direction="out"/>
     </method>
 
     <method name="StreamSubmitToolResultsGuided">
@@ -109,6 +114,7 @@
       <arg type="a(sss)" name="tools" direction="in"/>
       <annotation name="org.qtproject.QtDBus.QtTypeName.In5" value="QVariantMap"/>
       <arg type="a{sv}" name="options" direction="in"/>
+      <arg type="o" name="handle" direction="out"/>
     </method>
 
     <method name="StreamEmbed">
@@ -116,38 +122,45 @@
       <arg type="s" name="text" direction="in"/>
       <annotation name="org.qtproject.QtDBus.QtTypeName.In2" value="QVariantMap"/>
       <arg type="a{sv}" name="options" direction="in"/>
+      <arg type="o" name="handle" direction="out"/>
     </method>
 
     <signal name="ModelLoading">
+      <arg type="o" name="request_handle"/>
       <arg type="o" name="session_handle"/>
       <arg type="s" name="message"/>
     </signal>
 
     <signal name="TokenReceived">
+      <arg type="o" name="request_handle"/>
       <arg type="o" name="session_handle"/>
       <arg type="s" name="token"/>
       <arg type="b" name="done"/>
     </signal>
 
     <signal name="PredictionReceived">
+      <arg type="o" name="request_handle"/>
       <arg type="o" name="session_handle"/>
       <arg type="s" name="completion"/>
       <arg type="b" name="done"/>
     </signal>
 
     <signal name="GuidedSnapshotReceived">
+      <arg type="o" name="request_handle"/>
       <arg type="o" name="session_handle"/>
       <arg type="s" name="snapshot_json"/>
       <arg type="b" name="done"/>
     </signal>
 
     <signal name="GuidedToolCallsReceived">
+      <arg type="o" name="request_handle"/>
       <arg type="o" name="session_handle"/>
       <arg type="a(sss)" name="tool_calls"/>
       <arg type="b" name="done"/>
     </signal>
 
     <signal name="EmbeddingReceived">
+      <arg type="o" name="request_handle"/>
       <arg type="o" name="session_handle"/>
       <arg type="ad" name="embedding"/>
       <arg type="b" name="done"/>

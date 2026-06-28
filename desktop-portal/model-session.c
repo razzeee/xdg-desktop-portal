@@ -122,20 +122,27 @@ model_session_new (XdpContext       *context,
                    XdpAppInfo       *app_info,
                    GObject          *impl,
                    ModelSessionKind  kind,
+                   GVariant         *options,
                    const char       *backend_session_id,
                    GError          **error)
 {
   g_autofree char *generated_token = NULL;
+  const char *token;
   XdpSession *session;
   ModelSession *model_session;
 
-  generated_token = xdp_generate_token ();
+  token = lookup_session_token (options);
+  if (token == NULL)
+    {
+      generated_token = xdp_generate_token ();
+      token = generated_token;
+    }
 
   session = g_initable_new (MODEL_TYPE_SESSION, NULL, error,
                             "context", context,
                             "sender", xdp_app_info_get_sender (app_info),
                             "app-id", xdp_app_info_get_id (app_info),
-                            "token", generated_token,
+                            "token", token,
                             "connection", connection,
                             NULL);
   if (session == NULL)
@@ -205,6 +212,57 @@ generation_options_from_vardict (GVariant  *arg_options,
                                             maximum_response_tokens,
                                             temperature,
                                             sampling_mode,
-                                            source_language_hint,
-                                            target_language_hint));
+                                             source_language_hint,
+                                             target_language_hint));
+}
+
+void
+model_request_emit_response (XdpRequest  *request,
+                             guint        response,
+                             const char  *error_message)
+{
+  g_auto(GVariantBuilder) results_builder =
+    G_VARIANT_BUILDER_INIT (G_VARIANT_TYPE_VARDICT);
+
+  REQUEST_AUTOLOCK (request);
+
+  if (!request->exported)
+    return;
+
+  if (error_message != NULL)
+    g_variant_builder_add (&results_builder, "{sv}", "error",
+                           g_variant_new_string (error_message));
+
+  xdp_dbus_request_emit_response (XDP_DBUS_REQUEST (request),
+                                  response,
+                                  g_variant_builder_end (&results_builder));
+  xdp_request_unexport (request);
+}
+
+void
+model_request_emit_session_response (XdpRequest  *request,
+                                     const char  *session_handle)
+{
+  g_auto(GVariantBuilder) results_builder =
+    G_VARIANT_BUILDER_INIT (G_VARIANT_TYPE_VARDICT);
+
+  REQUEST_AUTOLOCK (request);
+
+  if (!request->exported)
+    return;
+
+  g_variant_builder_add (&results_builder, "{sv}", "session_handle",
+                         g_variant_new_object_path (session_handle));
+  xdp_dbus_request_emit_response (XDP_DBUS_REQUEST (request),
+                                  0,
+                                  g_variant_builder_end (&results_builder));
+  xdp_request_unexport (request);
+}
+
+gboolean
+model_request_is_exported (XdpRequest *request)
+{
+  REQUEST_AUTOLOCK (request);
+
+  return request->exported;
 }
