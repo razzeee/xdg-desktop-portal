@@ -12,7 +12,7 @@
       The Language portal lets sandboxed applications use local text model
       capabilities selected and governed by the system portal backend.
 
-      This documentation describes version 2 of this interface.
+      This documentation describes version 3 of this interface.
   -->
   <interface name="org.freedesktop.portal.Language">
     <!--

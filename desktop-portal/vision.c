@@ -606,7 +606,7 @@ vision_new (XdpContext        *context,
   vision->context = context;
   vision->impl = g_object_ref (impl);
   g_dbus_proxy_set_default_timeout (G_DBUS_PROXY (vision->impl), G_MAXINT);
-  xdp_dbus_vision_set_version (XDP_DBUS_VISION (vision), 2);
+  xdp_dbus_vision_set_version (XDP_DBUS_VISION (vision), 3);
 
   return vision;
 }

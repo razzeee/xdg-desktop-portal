@@ -9,7 +9,7 @@
       org.freedesktop.portal.Vision:
       @short_description: Portal for local vision model tasks
 
-      This documentation describes version 2 of this interface.
+      This documentation describes version 3 of this interface.
   -->
   <interface name="org.freedesktop.portal.Vision">
     <method name="GetUseCaseAvailability">

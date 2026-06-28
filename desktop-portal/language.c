@@ -849,7 +849,7 @@ language_new (XdpContext          *context,
   language->context = context;
   language->impl = g_object_ref (impl);
   g_dbus_proxy_set_default_timeout (G_DBUS_PROXY (language->impl), G_MAXINT);
-  xdp_dbus_language_set_version (XDP_DBUS_LANGUAGE (language), 2);
+  xdp_dbus_language_set_version (XDP_DBUS_LANGUAGE (language), 3);
 
   return language;
 }

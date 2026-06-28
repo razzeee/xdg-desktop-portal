@@ -9,7 +9,7 @@
       org.freedesktop.portal.Speech:
       @short_description: Portal for local speech model tasks
 
-      This documentation describes version 2 of this interface.
+      This documentation describes version 3 of this interface.
   -->
   <interface name="org.freedesktop.portal.Speech">
     <method name="GetUseCaseAvailability">

@@ -482,7 +482,7 @@ speech_new (XdpContext        *context,
   speech->context = context;
   speech->impl = g_object_ref (impl);
   g_dbus_proxy_set_default_timeout (G_DBUS_PROXY (speech->impl), G_MAXINT);
-  xdp_dbus_speech_set_version (XDP_DBUS_SPEECH (speech), 2);
+  xdp_dbus_speech_set_version (XDP_DBUS_SPEECH (speech), 3);
 
   return speech;
 }
