@@ -34,6 +34,9 @@ XdpSession *lookup_model_session (GDBusMethodInvocation *invocation,
                                   const char            *session_handle,
                                   ModelSessionKind       kind);
 
+const char *model_app_id_from_invocation (GDBusMethodInvocation *invocation,
+                                          XdpAppInfo            *app_info);
+
 const char *model_session_get_backend_session_id (ModelSession *session);
 
 GVariant *generation_options_from_vardict (GVariant  *arg_options,

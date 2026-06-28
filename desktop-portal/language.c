@@ -367,9 +367,9 @@ handle_language_get_use_case_availability (XdpDbusLanguage      *object,
   g_autoptr(GError) error = NULL;
 
   if (!xdp_dbus_impl_language_call_get_use_case_availability_sync (language->impl,
-                                                                   xdp_app_info_get_id (app_info),
-                                                                   arg_use_case,
-                                                                   &availability,
+                                                                    model_app_id_from_invocation (invocation, app_info),
+                                                                    arg_use_case,
+                                                                    &availability,
                                                                    NULL,
                                                                    &error))
     {
@@ -442,6 +442,7 @@ language_create_session_done (GObject      *source,
 static gboolean
 handle_language_create_session (XdpDbusLanguage      *object,
                                 GDBusMethodInvocation *invocation,
+                                const char            *arg_parent_window,
                                 const char            *arg_use_case,
                                 const char            *arg_instructions,
                                 GVariant              *arg_options)
@@ -459,7 +460,8 @@ handle_language_create_session (XdpDbusLanguage      *object,
                                         connection,
                                         arg_options);
   xdp_dbus_impl_language_call_create_session (language->impl,
-                                              xdp_app_info_get_id (app_info),
+                                              model_app_id_from_invocation (invocation, app_info),
+                                              arg_parent_window,
                                               arg_use_case,
                                               arg_instructions,
                                               xdp_request_get_cancellable (request),
@@ -849,7 +851,7 @@ language_new (XdpContext          *context,
   language->context = context;
   language->impl = g_object_ref (impl);
   g_dbus_proxy_set_default_timeout (G_DBUS_PROXY (language->impl), G_MAXINT);
-  xdp_dbus_language_set_version (XDP_DBUS_LANGUAGE (language), 3);
+  xdp_dbus_language_set_version (XDP_DBUS_LANGUAGE (language), 4);
 
   return language;
 }

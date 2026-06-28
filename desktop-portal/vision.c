@@ -282,7 +282,7 @@ handle_vision_get_use_case_availability (XdpDbusVision       *object,
   g_autoptr(GError) error = NULL;
 
   if (!xdp_dbus_impl_vision_call_get_use_case_availability_sync (vision->impl,
-                                                                 xdp_app_info_get_id (app_info),
+                                                                 model_app_id_from_invocation (invocation, app_info),
                                                                  arg_use_case,
                                                                  &availability,
                                                                  NULL,
@@ -357,6 +357,7 @@ vision_create_session_done (GObject      *source,
 static gboolean
 handle_vision_create_session (XdpDbusVision       *object,
                               GDBusMethodInvocation *invocation,
+                              const char            *arg_parent_window,
                               const char            *arg_use_case,
                               const char            *arg_instructions,
                               GVariant              *arg_options)
@@ -374,7 +375,8 @@ handle_vision_create_session (XdpDbusVision       *object,
                                       connection,
                                       arg_options);
   xdp_dbus_impl_vision_call_create_session (vision->impl,
-                                            xdp_app_info_get_id (app_info),
+                                            model_app_id_from_invocation (invocation, app_info),
+                                            arg_parent_window,
                                             arg_use_case,
                                             arg_instructions,
                                             xdp_request_get_cancellable (request),
@@ -606,7 +608,7 @@ vision_new (XdpContext        *context,
   vision->context = context;
   vision->impl = g_object_ref (impl);
   g_dbus_proxy_set_default_timeout (G_DBUS_PROXY (vision->impl), G_MAXINT);
-  xdp_dbus_vision_set_version (XDP_DBUS_VISION (vision), 3);
+  xdp_dbus_vision_set_version (XDP_DBUS_VISION (vision), 4);
 
   return vision;
 }

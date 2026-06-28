@@ -250,7 +250,7 @@ handle_speech_get_use_case_availability (XdpDbusSpeech       *object,
   g_autoptr(GError) error = NULL;
 
   if (!xdp_dbus_impl_speech_call_get_use_case_availability_sync (speech->impl,
-                                                                 xdp_app_info_get_id (app_info),
+                                                                 model_app_id_from_invocation (invocation, app_info),
                                                                  arg_use_case,
                                                                  &availability,
                                                                  NULL,
@@ -325,6 +325,7 @@ speech_create_session_done (GObject      *source,
 static gboolean
 handle_speech_create_session (XdpDbusSpeech       *object,
                               GDBusMethodInvocation *invocation,
+                              const char            *arg_parent_window,
                               const char            *arg_use_case,
                               const char            *arg_instructions,
                               GVariant              *arg_options)
@@ -342,7 +343,8 @@ handle_speech_create_session (XdpDbusSpeech       *object,
                                       connection,
                                       arg_options);
   xdp_dbus_impl_speech_call_create_session (speech->impl,
-                                            xdp_app_info_get_id (app_info),
+                                            model_app_id_from_invocation (invocation, app_info),
+                                            arg_parent_window,
                                             arg_use_case,
                                             arg_instructions,
                                             xdp_request_get_cancellable (request),
@@ -482,7 +484,7 @@ speech_new (XdpContext        *context,
   speech->context = context;
   speech->impl = g_object_ref (impl);
   g_dbus_proxy_set_default_timeout (G_DBUS_PROXY (speech->impl), G_MAXINT);
-  xdp_dbus_speech_set_version (XDP_DBUS_SPEECH (speech), 3);
+  xdp_dbus_speech_set_version (XDP_DBUS_SPEECH (speech), 4);
 
   return speech;
 }

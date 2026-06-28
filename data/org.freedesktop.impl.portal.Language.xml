@@ -18,6 +18,7 @@
 
     <method name="CreateSession">
       <arg type="s" name="app_id" direction="in"/>
+      <arg type="s" name="parent_window" direction="in"/>
       <arg type="s" name="use_case" direction="in"/>
       <arg type="s" name="instructions" direction="in"/>
       <arg type="s" name="session_id" direction="out"/>

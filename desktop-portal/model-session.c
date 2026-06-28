@@ -178,6 +178,18 @@ lookup_model_session (GDBusMethodInvocation *invocation,
 }
 
 const char *
+model_app_id_from_invocation (GDBusMethodInvocation *invocation,
+                              XdpAppInfo            *app_info)
+{
+  const char *app_id = xdp_app_info_get_id (app_info);
+
+  if (app_id == NULL || app_id[0] == '\0')
+    return g_dbus_method_invocation_get_sender (invocation);
+
+  return app_id;
+}
+
+const char *
 model_session_get_backend_session_id (ModelSession *session)
 {
   return session->backend_session_id;
