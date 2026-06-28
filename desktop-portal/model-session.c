@@ -7,6 +7,7 @@
 #include "model-session.h"
 
 #include <gio/gio.h>
+#include <string.h>
 
 #include "xdp-app-info.h"
 #include "xdp-context.h"
@@ -228,6 +229,26 @@ generation_options_from_vardict (GVariant  *arg_options,
                                              target_language_hint));
 }
 
+static char *
+model_error_name_from_message (const char *error_message)
+{
+  const char *start;
+  const char *end;
+
+  if (error_message == NULL)
+    return NULL;
+
+  start = strstr (error_message, "aileron.Inference.");
+  if (start == NULL)
+    return NULL;
+
+  end = start;
+  while (g_ascii_isalnum (*end) || *end == '_' || *end == '.')
+    end++;
+
+  return g_strndup (start, end - start);
+}
+
 void
 model_request_emit_response (XdpRequest  *request,
                              guint        response,
@@ -242,8 +263,15 @@ model_request_emit_response (XdpRequest  *request,
     return;
 
   if (error_message != NULL)
-    g_variant_builder_add (&results_builder, "{sv}", "error",
-                           g_variant_new_string (error_message));
+    {
+      g_autofree char *error_name = model_error_name_from_message (error_message);
+
+      if (error_name != NULL)
+        g_variant_builder_add (&results_builder, "{sv}", "error_name",
+                               g_variant_new_string (error_name));
+      g_variant_builder_add (&results_builder, "{sv}", "error",
+                             g_variant_new_string (error_message));
+    }
 
   xdp_dbus_request_emit_response (XDP_DBUS_REQUEST (request),
                                   response,
