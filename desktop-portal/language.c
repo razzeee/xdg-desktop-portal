@@ -161,6 +161,20 @@ language_signal_forward_disconnect (LanguageSignalForward *forward)
 }
 
 static void
+language_emit_signal_to_request (LanguageSignalForward *forward,
+                                 const char            *signal_name,
+                                 GVariant              *parameters)
+{
+  g_dbus_connection_emit_signal (xdp_context_get_connection (forward->language->context),
+                                 forward->request->sender,
+                                 DESKTOP_DBUS_PATH,
+                                 LANGUAGE_DBUS_IFACE,
+                                 signal_name,
+                                 parameters,
+                                 NULL);
+}
+
+static void
 forward_model_loading (XdpDbusImplLanguage *impl,
                        const char          *request_id,
                        const char          *session_id,
@@ -173,10 +187,12 @@ forward_model_loading (XdpDbusImplLanguage *impl,
       g_strcmp0 (session_id, forward->backend_session_id) != 0)
     return;
 
-  xdp_dbus_language_emit_model_loading (XDP_DBUS_LANGUAGE (forward->language),
-                                        forward->request_handle,
-                                        forward->session_handle,
-                                        message);
+  language_emit_signal_to_request (forward,
+                                   "ModelLoading",
+                                   g_variant_new ("(oos)",
+                                                  forward->request_handle,
+                                                  forward->session_handle,
+                                                  message));
 }
 
 static void
@@ -249,11 +265,13 @@ forward_token_received (XdpDbusImplLanguage *impl,
       g_strcmp0 (session_id, forward->backend_session_id) != 0)
     return;
 
-  xdp_dbus_language_emit_token_received (XDP_DBUS_LANGUAGE (forward->language),
-                                          forward->request_handle,
-                                          forward->session_handle,
-                                          token,
-                                          done);
+  language_emit_signal_to_request (forward,
+                                   "TokenReceived",
+                                   g_variant_new ("(oosb)",
+                                                  forward->request_handle,
+                                                  forward->session_handle,
+                                                  token,
+                                                  done));
 
   if (done)
     language_signal_forward_disconnect (forward);
@@ -273,11 +291,13 @@ forward_prediction_received (XdpDbusImplLanguage *impl,
       g_strcmp0 (session_id, forward->backend_session_id) != 0)
     return;
 
-  xdp_dbus_language_emit_prediction_received (XDP_DBUS_LANGUAGE (forward->language),
-                                              forward->request_handle,
-                                              forward->session_handle,
-                                              completion,
-                                              done);
+  language_emit_signal_to_request (forward,
+                                   "PredictionReceived",
+                                   g_variant_new ("(oosb)",
+                                                  forward->request_handle,
+                                                  forward->session_handle,
+                                                  completion,
+                                                  done));
 
   if (done)
     language_signal_forward_disconnect (forward);
@@ -297,11 +317,13 @@ forward_guided_snapshot_received (XdpDbusImplLanguage *impl,
       g_strcmp0 (session_id, forward->backend_session_id) != 0)
     return;
 
-  xdp_dbus_language_emit_guided_snapshot_received (XDP_DBUS_LANGUAGE (forward->language),
-                                                    forward->request_handle,
-                                                    forward->session_handle,
-                                                    snapshot_json,
-                                                    done);
+  language_emit_signal_to_request (forward,
+                                   "GuidedSnapshotReceived",
+                                   g_variant_new ("(oosb)",
+                                                  forward->request_handle,
+                                                  forward->session_handle,
+                                                  snapshot_json,
+                                                  done));
 
   if (done)
     language_signal_forward_disconnect (forward);
@@ -321,11 +343,13 @@ forward_guided_tool_calls_received (XdpDbusImplLanguage *impl,
       g_strcmp0 (session_id, forward->backend_session_id) != 0)
     return;
 
-  xdp_dbus_language_emit_guided_tool_calls_received (XDP_DBUS_LANGUAGE (forward->language),
-                                                      forward->request_handle,
-                                                      forward->session_handle,
-                                                      tool_calls,
-                                                      done);
+  language_emit_signal_to_request (forward,
+                                   "GuidedToolCallsReceived",
+                                   g_variant_new ("(oo@a(sss)b)",
+                                                  forward->request_handle,
+                                                  forward->session_handle,
+                                                  g_variant_ref (tool_calls),
+                                                  done));
 
   if (done)
     language_signal_forward_disconnect (forward);
@@ -345,11 +369,13 @@ forward_embedding_received (XdpDbusImplLanguage *impl,
       g_strcmp0 (session_id, forward->backend_session_id) != 0)
     return;
 
-  xdp_dbus_language_emit_embedding_received (XDP_DBUS_LANGUAGE (forward->language),
-                                             forward->request_handle,
-                                             forward->session_handle,
-                                             embedding,
-                                             done);
+  language_emit_signal_to_request (forward,
+                                   "EmbeddingReceived",
+                                   g_variant_new ("(oo@adb)",
+                                                  forward->request_handle,
+                                                  forward->session_handle,
+                                                  g_variant_ref (embedding),
+                                                  done));
 
   if (done)
     language_signal_forward_disconnect (forward);

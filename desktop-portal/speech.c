@@ -152,6 +152,20 @@ speech_signal_forward_disconnect (SpeechSignalForward *forward)
 }
 
 static void
+speech_emit_signal_to_request (SpeechSignalForward *forward,
+                               const char          *signal_name,
+                               GVariant            *parameters)
+{
+  g_dbus_connection_emit_signal (xdp_context_get_connection (forward->speech->context),
+                                 forward->request->sender,
+                                 DESKTOP_DBUS_PATH,
+                                 SPEECH_DBUS_IFACE,
+                                 signal_name,
+                                 parameters,
+                                 NULL);
+}
+
+static void
 forward_model_loading (XdpDbusImplSpeech *impl,
                        const char        *request_id,
                        const char        *session_id,
@@ -164,10 +178,12 @@ forward_model_loading (XdpDbusImplSpeech *impl,
       g_strcmp0 (session_id, forward->backend_session_id) != 0)
     return;
 
-  xdp_dbus_speech_emit_model_loading (XDP_DBUS_SPEECH (forward->speech),
-                                      forward->request_handle,
-                                      forward->session_handle,
-                                      message);
+  speech_emit_signal_to_request (forward,
+                                 "ModelLoading",
+                                 g_variant_new ("(oos)",
+                                                forward->request_handle,
+                                                forward->session_handle,
+                                                message));
 }
 
 static void
@@ -228,11 +244,13 @@ forward_transcription_received (XdpDbusImplSpeech *impl,
       g_strcmp0 (session_id, forward->backend_session_id) != 0)
     return;
 
-  xdp_dbus_speech_emit_transcription_received (XDP_DBUS_SPEECH (forward->speech),
+  speech_emit_signal_to_request (forward,
+                                 "TranscriptionReceived",
+                                 g_variant_new ("(oosb)",
                                                 forward->request_handle,
                                                 forward->session_handle,
                                                 text,
-                                                done);
+                                                done));
 
   if (done)
     speech_signal_forward_disconnect (forward);

@@ -154,6 +154,20 @@ vision_signal_forward_disconnect (VisionSignalForward *forward)
 }
 
 static void
+vision_emit_signal_to_request (VisionSignalForward *forward,
+                               const char          *signal_name,
+                               GVariant            *parameters)
+{
+  g_dbus_connection_emit_signal (xdp_context_get_connection (forward->vision->context),
+                                 forward->request->sender,
+                                 DESKTOP_DBUS_PATH,
+                                 VISION_DBUS_IFACE,
+                                 signal_name,
+                                 parameters,
+                                 NULL);
+}
+
+static void
 forward_model_loading (XdpDbusImplVision *impl,
                        const char        *request_id,
                        const char        *session_id,
@@ -166,10 +180,12 @@ forward_model_loading (XdpDbusImplVision *impl,
       g_strcmp0 (session_id, forward->backend_session_id) != 0)
     return;
 
-  xdp_dbus_vision_emit_model_loading (XDP_DBUS_VISION (forward->vision),
-                                      forward->request_handle,
-                                      forward->session_handle,
-                                      message);
+  vision_emit_signal_to_request (forward,
+                                 "ModelLoading",
+                                 g_variant_new ("(oos)",
+                                                forward->request_handle,
+                                                forward->session_handle,
+                                                message));
 }
 
 static void
@@ -236,11 +252,13 @@ forward_vision_text_received (XdpDbusImplVision *impl,
       g_strcmp0 (session_id, forward->backend_session_id) != 0)
     return;
 
-  xdp_dbus_vision_emit_vision_text_received (XDP_DBUS_VISION (forward->vision),
-                                              forward->request_handle,
-                                              forward->session_handle,
-                                              text,
-                                              done);
+  vision_emit_signal_to_request (forward,
+                                 "VisionTextReceived",
+                                 g_variant_new ("(oosb)",
+                                                forward->request_handle,
+                                                forward->session_handle,
+                                                text,
+                                                done));
 
   if (done)
     vision_signal_forward_disconnect (forward);
@@ -260,11 +278,13 @@ forward_vision_segments_received (XdpDbusImplVision *impl,
       g_strcmp0 (session_id, forward->backend_session_id) != 0)
     return;
 
-  xdp_dbus_vision_emit_vision_segments_received (XDP_DBUS_VISION (forward->vision),
-                                                  forward->request_handle,
-                                                  forward->session_handle,
-                                                  segments,
-                                                  done);
+  vision_emit_signal_to_request (forward,
+                                 "VisionSegmentsReceived",
+                                 g_variant_new ("(oo@a(sddddd)b)",
+                                                forward->request_handle,
+                                                forward->session_handle,
+                                                g_variant_ref (segments),
+                                                done));
 
   if (done)
     vision_signal_forward_disconnect (forward);
