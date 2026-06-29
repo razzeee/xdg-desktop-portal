@@ -9,9 +9,27 @@
       org.freedesktop.portal.Speech:
       @short_description: Portal for local speech model tasks
 
+      Supported use-cases are ``speech.transcribe`` for verbatim source-language
+      transcription and ``speech.translate`` for speech-to-English translation.
+
+      Methods returning request handles accept the standard ``handle_token``
+      option. CreateSession also accepts ``session_handle_token``. Other option
+      keys are reserved. Failed request responses may include ``error`` and
+      ``error_name`` strings in the results vardict. Stream payload signals are
+      sent only to the caller that owns the request and are correlated by
+      ``request_handle``.
+
       This documentation describes version 4 of this interface.
   -->
   <interface name="org.freedesktop.portal.Speech">
+    <!--
+        GetUseCaseAvailability:
+        @use_case: ``speech.transcribe`` or ``speech.translate``
+        @options: Reserved vardict; no keys are currently defined
+        @availability: Struct containing availability, code, and human-readable reason
+
+        Returns whether a local profile is assigned and runnable for @use_case.
+    -->
     <method name="GetUseCaseAvailability">
       <arg type="s" name="use_case" direction="in"/>
       <annotation name="org.qtproject.QtDBus.QtTypeName.In1" value="QVariantMap"/>
@@ -25,7 +43,7 @@
         @use_case: ``speech.transcribe`` for source-language transcription,
           or ``speech.translate`` for speech-to-English translation
         @instructions: Stable system instructions for this session
-        @options: Vardict with optional further information
+        @options: Vardict with optional ``handle_token`` and ``session_handle_token`` strings
         @handle: Object path for the :ref:`org.freedesktop.portal.Request` object representing this call
 
         The session @use_case selects whether StreamTranscribe returns a
@@ -42,6 +60,16 @@
       <arg type="o" name="handle" direction="out"/>
     </method>
 
+    <!--
+        Prewarm:
+        @session_handle: A speech session handle returned by CreateSession
+        @options: Vardict with optional ``handle_token`` string
+        @handle: Object path for the :ref:`org.freedesktop.portal.Request` object representing this call
+
+        Starts the backing runtime before the first user-visible operation.
+        Completion, cancellation, and failures are reported through the
+        Request::Response signal.
+    -->
     <method name="Prewarm">
       <arg type="o" name="session_handle" direction="in"/>
       <annotation name="org.qtproject.QtDBus.QtTypeName.In1" value="QVariantMap"/>
@@ -56,6 +84,7 @@
         argument is base64-encoded 16 kHz mono f32le PCM and must fit within
         the session bus message limit. @source_language_hint is the optional
         spoken input language hint.
+        @options: Reserved vardict with optional ``handle_token`` string
         The method returns a Request handle immediately. Segments are emitted as
         TranscriptionReceived signals; completion, cancellation, and failures
         are reported through the Request::Response signal.

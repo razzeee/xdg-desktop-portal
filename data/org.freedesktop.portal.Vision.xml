@@ -9,9 +9,27 @@
       org.freedesktop.portal.Vision:
       @short_description: Portal for local vision model tasks
 
+      Supported use-cases are ``vision.describe``, ``vision.ocr``, and
+      ``vision.segment``.
+
+      Methods returning request handles accept the standard ``handle_token``
+      option. CreateSession also accepts ``session_handle_token``. Other option
+      keys are reserved. Failed request responses may include ``error`` and
+      ``error_name`` strings in the results vardict. Stream payload signals are
+      sent only to the caller that owns the request and are correlated by
+      ``request_handle``.
+
       This documentation describes version 4 of this interface.
   -->
   <interface name="org.freedesktop.portal.Vision">
+    <!--
+        GetUseCaseAvailability:
+        @use_case: ``vision.describe``, ``vision.ocr``, or ``vision.segment``
+        @options: Reserved vardict; no keys are currently defined
+        @availability: Struct containing availability, code, and human-readable reason
+
+        Returns whether a local profile is assigned and runnable for @use_case.
+    -->
     <method name="GetUseCaseAvailability">
       <arg type="s" name="use_case" direction="in"/>
       <annotation name="org.qtproject.QtDBus.QtTypeName.In1" value="QVariantMap"/>
@@ -25,7 +43,7 @@
         @use_case: ``vision.describe`` for image descriptions,
           ``vision.ocr`` for text extraction, or ``vision.segment`` for object boxes
         @instructions: Stable system instructions for this session
-        @options: Vardict with optional further information
+        @options: Vardict with optional ``handle_token`` and ``session_handle_token`` strings
         @handle: Object path for the :ref:`org.freedesktop.portal.Request` object representing this call
 
         The session @use_case selects which vision operation is permitted for
@@ -42,6 +60,16 @@
       <arg type="o" name="handle" direction="out"/>
     </method>
 
+    <!--
+        Prewarm:
+        @session_handle: A vision session handle returned by CreateSession
+        @options: Vardict with optional ``handle_token`` string
+        @handle: Object path for the :ref:`org.freedesktop.portal.Request` object representing this call
+
+        Starts the backing runtime before the first user-visible operation.
+        Completion, cancellation, and failures are reported through the
+        Request::Response signal.
+    -->
     <method name="Prewarm">
       <arg type="o" name="session_handle" direction="in"/>
       <annotation name="org.qtproject.QtDBus.QtTypeName.In1" value="QVariantMap"/>
@@ -54,7 +82,7 @@
         @session_handle: A ``vision.describe`` session handle returned by CreateSession
         @image: Base64-encoded PNG or JPEG image bytes; the encoded payload
           must fit within the session bus message limit
-        @options: Vardict with optional further information
+        @options: Reserved vardict with optional ``handle_token`` string
         The method returns a Request handle immediately. Natural-language image
         description tokens are emitted as VisionTextReceived signals;
         completion, cancellation, and failures are reported through the
@@ -73,7 +101,7 @@
         @session_handle: A ``vision.ocr`` session handle returned by CreateSession
         @image: Base64-encoded PNG or JPEG image bytes; the encoded payload
           must fit within the session bus message limit
-        @options: Vardict with optional further information
+        @options: Reserved vardict with optional ``handle_token`` string
         The method returns a Request handle immediately. Text extracted from the
         image is emitted as VisionTextReceived signals; completion,
         cancellation, and failures are reported through the Request::Response
@@ -92,7 +120,7 @@
         @session_handle: A ``vision.segment`` session handle returned by CreateSession
         @image: Base64-encoded PNG or JPEG image bytes; the encoded payload
           must fit within the session bus message limit
-        @options: Vardict with optional further information
+        @options: Reserved vardict with optional ``handle_token`` string
         The method returns a Request handle immediately. Detected objects are
         emitted as VisionSegmentsReceived signals; completion, cancellation, and
         failures are reported through the Request::Response signal.
