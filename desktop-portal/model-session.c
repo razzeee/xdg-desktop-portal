@@ -221,7 +221,7 @@ model_session_ensure_language_generation_use_case (GDBusMethodInvocation *invoca
   g_dbus_method_invocation_return_error (invocation,
                                          XDG_DESKTOP_PORTAL_ERROR,
                                          XDG_DESKTOP_PORTAL_ERROR_INVALID_ARGUMENT,
-                                         "full text generation requires a language generation use-case, got %s",
+                                         "aileron.Inference.InvalidInput: full text generation requires a language generation use-case, got %s",
                                          use_case);
   return FALSE;
 }
@@ -238,7 +238,7 @@ model_session_ensure_exact_use_case (GDBusMethodInvocation *invocation,
   g_dbus_method_invocation_return_error (invocation,
                                          XDG_DESKTOP_PORTAL_ERROR,
                                          XDG_DESKTOP_PORTAL_ERROR_INVALID_ARGUMENT,
-                                         "%s requires use-case %s, got %s",
+                                         "aileron.Inference.InvalidInput: %s requires use-case %s, got %s",
                                          method,
                                          expected_use_case,
                                          session->use_case);
