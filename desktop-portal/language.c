@@ -551,6 +551,8 @@ handle_language_prewarm (XdpDbusLanguage      *object,
   REQUEST_AUTOLOCK (request);
   SESSION_AUTOLOCK (session);
   model_session = MODEL_SESSION (session);
+  if (!model_session_ensure_open (invocation, model_session))
+    return G_DBUS_METHOD_INVOCATION_HANDLED;
   if (!model_request_export_with_impl (request,
                                        g_dbus_method_invocation_get_connection (invocation),
                                        G_DBUS_PROXY (language->impl),
@@ -592,8 +594,6 @@ handle_language_stream_predict_next (XdpDbusLanguage      *object,
   ModelSession *model_session;
   g_autoptr(GVariant) options = NULL;
   g_autoptr(GError) error = NULL;
-  g_autofree char *backend_session_id = NULL;
-  g_autofree char *session_handle = NULL;
   XdpRequest *request = xdp_request_from_invocation (invocation);
   LanguageSignalForward *forward;
 
@@ -614,14 +614,12 @@ handle_language_stream_predict_next (XdpDbusLanguage      *object,
       return G_DBUS_METHOD_INVOCATION_HANDLED;
     }
 
-  {
-    SESSION_AUTOLOCK (session);
-    model_session = MODEL_SESSION (session);
-    backend_session_id = g_strdup (model_session_get_backend_session_id (model_session));
-    session_handle = g_strdup (session->id);
-  }
-
   REQUEST_AUTOLOCK (request);
+  SESSION_AUTOLOCK (session);
+  model_session = MODEL_SESSION (session);
+  if (!model_session_ensure_open (invocation, model_session))
+    return G_DBUS_METHOD_INVOCATION_HANDLED;
+
   if (!model_request_export_with_impl (request,
                                        g_dbus_method_invocation_get_connection (invocation),
                                        G_DBUS_PROXY (language->impl),
@@ -634,8 +632,8 @@ handle_language_stream_predict_next (XdpDbusLanguage      *object,
   forward = language_signal_forward_new (language,
                                           language->impl,
                                           request,
-                                          backend_session_id,
-                                          session_handle,
+                                          model_session_get_backend_session_id (model_session),
+                                          session->id,
                                           LANGUAGE_CALL_STREAM_PREDICT_NEXT);
   language_signal_forward_connect_loading (forward);
   forward->handler_id = g_signal_connect (language->impl,
@@ -645,7 +643,7 @@ handle_language_stream_predict_next (XdpDbusLanguage      *object,
 
   xdp_dbus_impl_language_call_stream_predict_next (language->impl,
                                                     xdp_request_get_object_path (request),
-                                                    backend_session_id,
+                                                    model_session_get_backend_session_id (model_session),
                                                     arg_prefix,
                                                     options,
                                                     xdp_request_get_cancellable (request),
@@ -689,6 +687,8 @@ handle_language_stream_response (XdpDbusLanguage      *object,
   REQUEST_AUTOLOCK (request);
   SESSION_AUTOLOCK (session);
   model_session = MODEL_SESSION (session);
+  if (!model_session_ensure_open (invocation, model_session))
+    return G_DBUS_METHOD_INVOCATION_HANDLED;
 
   if (!model_request_export_with_impl (request,
                                        g_dbus_method_invocation_get_connection (invocation),
@@ -759,6 +759,8 @@ handle_language_stream_respond_guided (XdpDbusLanguage      *object,
   REQUEST_AUTOLOCK (request);
   SESSION_AUTOLOCK (session);
   model_session = MODEL_SESSION (session);
+  if (!model_session_ensure_open (invocation, model_session))
+    return G_DBUS_METHOD_INVOCATION_HANDLED;
 
   if (!model_request_export_with_impl (request,
                                        g_dbus_method_invocation_get_connection (invocation),
@@ -836,6 +838,8 @@ handle_language_stream_submit_tool_results_guided (XdpDbusLanguage      *object,
   REQUEST_AUTOLOCK (request);
   SESSION_AUTOLOCK (session);
   model_session = MODEL_SESSION (session);
+  if (!model_session_ensure_open (invocation, model_session))
+    return G_DBUS_METHOD_INVOCATION_HANDLED;
 
   if (!model_request_export_with_impl (request,
                                        g_dbus_method_invocation_get_connection (invocation),
@@ -906,6 +910,8 @@ handle_language_stream_embed (XdpDbusLanguage      *object,
   REQUEST_AUTOLOCK (request);
   SESSION_AUTOLOCK (session);
   model_session = MODEL_SESSION (session);
+  if (!model_session_ensure_open (invocation, model_session))
+    return G_DBUS_METHOD_INVOCATION_HANDLED;
 
   if (!model_request_export_with_impl (request,
                                        g_dbus_method_invocation_get_connection (invocation),

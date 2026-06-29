@@ -426,6 +426,8 @@ handle_speech_prewarm (XdpDbusSpeech       *object,
   REQUEST_AUTOLOCK (request);
   SESSION_AUTOLOCK (session);
   model_session = MODEL_SESSION (session);
+  if (!model_session_ensure_open (invocation, model_session))
+    return G_DBUS_METHOD_INVOCATION_HANDLED;
   if (!model_request_export_with_impl (request,
                                        g_dbus_method_invocation_get_connection (invocation),
                                        G_DBUS_PROXY (speech->impl),
@@ -477,6 +479,8 @@ handle_speech_stream_transcribe (XdpDbusSpeech       *object,
   REQUEST_AUTOLOCK (request);
   SESSION_AUTOLOCK (session);
   model_session = MODEL_SESSION (session);
+  if (!model_session_ensure_open (invocation, model_session))
+    return G_DBUS_METHOD_INVOCATION_HANDLED;
 
   if (!model_request_export_with_impl (request,
                                        g_dbus_method_invocation_get_connection (invocation),

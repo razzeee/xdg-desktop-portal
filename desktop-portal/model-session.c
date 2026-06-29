@@ -245,6 +245,22 @@ model_session_ensure_exact_use_case (GDBusMethodInvocation *invocation,
   return FALSE;
 }
 
+gboolean
+model_session_ensure_open (GDBusMethodInvocation *invocation,
+                           ModelSession          *session)
+{
+  XdpSession *xdp_session = XDP_SESSION (session);
+
+  if (!xdp_session->closed && session->backend_session_id != NULL)
+    return TRUE;
+
+  g_dbus_method_invocation_return_error (invocation,
+                                         G_DBUS_ERROR,
+                                         G_DBUS_ERROR_ACCESS_DENIED,
+                                         "Invalid session");
+  return FALSE;
+}
+
 GVariant *
 generation_options_from_vardict (GVariant  *arg_options,
                                  GError   **error)

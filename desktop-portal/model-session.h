@@ -48,6 +48,9 @@ gboolean model_session_ensure_exact_use_case (GDBusMethodInvocation *invocation,
                                               const char            *expected_use_case,
                                               const char            *method);
 
+gboolean model_session_ensure_open (GDBusMethodInvocation *invocation,
+                                    ModelSession          *session);
+
 GVariant *generation_options_from_vardict (GVariant  *arg_options,
                                            GError   **error);
 
