@@ -429,11 +429,15 @@ model_request_register_session_and_emit_response (XdpRequest *request,
 guint
 model_response_from_error (GError *error)
 {
+  g_autofree char *error_name = NULL;
   g_autofree char *remote_error = NULL;
 
   if (g_error_matches (error, G_IO_ERROR, G_IO_ERROR_CANCELLED) ||
-      g_error_matches (error, XDG_DESKTOP_PORTAL_ERROR, XDG_DESKTOP_PORTAL_ERROR_CANCELLED) ||
-      (error->message != NULL && strstr (error->message, "RequestCancelled") != NULL))
+      g_error_matches (error, XDG_DESKTOP_PORTAL_ERROR, XDG_DESKTOP_PORTAL_ERROR_CANCELLED))
+    return 1;
+
+  error_name = model_error_name_from_message (error->message);
+  if (g_strcmp0 (error_name, "aileron.Inference.RequestCancelled") == 0)
     return 1;
 
   remote_error = g_dbus_error_get_remote_error (error);
