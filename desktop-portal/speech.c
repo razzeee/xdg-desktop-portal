@@ -335,18 +335,30 @@ handle_speech_create_session (XdpDbusSpeech       *object,
   GDBusConnection *connection = g_dbus_method_invocation_get_connection (invocation);
   XdpRequest *request = xdp_request_from_invocation (invocation);
   SpeechCreateSession *create;
+  g_autoptr(GError) error = NULL;
 
-  xdp_request_export (request, connection);
+  REQUEST_AUTOLOCK (request);
+
+  if (!model_request_export_with_impl (request,
+                                       connection,
+                                       G_DBUS_PROXY (speech->impl),
+                                       &error))
+    {
+      g_dbus_method_invocation_return_gerror (invocation, error);
+      return G_DBUS_METHOD_INVOCATION_HANDLED;
+    }
+
   create = speech_create_session_new (speech,
-                                      request,
-                                      app_info,
-                                      connection,
-                                      arg_options);
+                                       request,
+                                       app_info,
+                                       connection,
+                                       arg_options);
   xdp_dbus_impl_speech_call_create_session (speech->impl,
-                                            model_app_id_from_invocation (invocation, app_info),
-                                            arg_parent_window,
-                                            arg_use_case,
-                                            arg_instructions,
+                                             xdp_request_get_object_path (request),
+                                             model_app_id_from_invocation (invocation, app_info),
+                                             arg_parent_window,
+                                             arg_use_case,
+                                             arg_instructions,
                                             xdp_request_get_cancellable (request),
                                             speech_create_session_done,
                                             create);
@@ -367,14 +379,24 @@ handle_speech_prewarm (XdpDbusSpeech       *object,
   ModelSession *model_session;
   XdpRequest *request = xdp_request_from_invocation (invocation);
   SpeechSignalForward *forward;
+  g_autoptr(GError) error = NULL;
 
   session = lookup_model_session (invocation, arg_session_handle, MODEL_SESSION_SPEECH);
   if (session == NULL)
     return G_DBUS_METHOD_INVOCATION_HANDLED;
 
+  REQUEST_AUTOLOCK (request);
   SESSION_AUTOLOCK (session);
   model_session = MODEL_SESSION (session);
-  xdp_request_export (request, g_dbus_method_invocation_get_connection (invocation));
+  if (!model_request_export_with_impl (request,
+                                       g_dbus_method_invocation_get_connection (invocation),
+                                       G_DBUS_PROXY (speech->impl),
+                                       &error))
+    {
+      g_dbus_method_invocation_return_gerror (invocation, error);
+      return G_DBUS_METHOD_INVOCATION_HANDLED;
+    }
+
   forward = speech_signal_forward_new (speech,
                                         speech->impl,
                                         request,
@@ -408,15 +430,25 @@ handle_speech_stream_transcribe (XdpDbusSpeech       *object,
   ModelSession *model_session;
   XdpRequest *request = xdp_request_from_invocation (invocation);
   SpeechSignalForward *forward;
+  g_autoptr(GError) error = NULL;
 
   session = lookup_model_session (invocation, arg_session_handle, MODEL_SESSION_SPEECH);
   if (session == NULL)
     return G_DBUS_METHOD_INVOCATION_HANDLED;
 
+  REQUEST_AUTOLOCK (request);
   SESSION_AUTOLOCK (session);
   model_session = MODEL_SESSION (session);
 
-  xdp_request_export (request, g_dbus_method_invocation_get_connection (invocation));
+  if (!model_request_export_with_impl (request,
+                                       g_dbus_method_invocation_get_connection (invocation),
+                                       G_DBUS_PROXY (speech->impl),
+                                       &error))
+    {
+      g_dbus_method_invocation_return_gerror (invocation, error);
+      return G_DBUS_METHOD_INVOCATION_HANDLED;
+    }
+
   forward = speech_signal_forward_new (speech,
                                         speech->impl,
                                         request,

@@ -55,8 +55,10 @@
         @image: Base64-encoded PNG or JPEG image bytes; the encoded payload
           must fit within the session bus message limit
         @options: Vardict with optional further information
-        Natural-language image description tokens are emitted as
-        VisionTextReceived signals while this call is in progress.
+        The method returns a Request handle immediately. Natural-language image
+        description tokens are emitted as VisionTextReceived signals;
+        completion, cancellation, and failures are reported through the
+        Request::Response signal.
     -->
     <method name="StreamDescribe">
       <arg type="o" name="session_handle" direction="in"/>
@@ -72,8 +74,10 @@
         @image: Base64-encoded PNG or JPEG image bytes; the encoded payload
           must fit within the session bus message limit
         @options: Vardict with optional further information
-        Text extracted from the image is emitted as VisionTextReceived signals
-        while this call is in progress.
+        The method returns a Request handle immediately. Text extracted from the
+        image is emitted as VisionTextReceived signals; completion,
+        cancellation, and failures are reported through the Request::Response
+        signal.
     -->
     <method name="StreamOcr">
       <arg type="o" name="session_handle" direction="in"/>
@@ -89,7 +93,9 @@
         @image: Base64-encoded PNG or JPEG image bytes; the encoded payload
           must fit within the session bus message limit
         @options: Vardict with optional further information
-        Detected objects are emitted as VisionSegmentsReceived signals.
+        The method returns a Request handle immediately. Detected objects are
+        emitted as VisionSegmentsReceived signals; completion, cancellation, and
+        failures are reported through the Request::Response signal.
 
         Segment coordinates are normalized rectangles in the ``0.0..1.0``
         range relative to the image dimensions.

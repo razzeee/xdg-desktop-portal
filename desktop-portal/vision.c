@@ -367,18 +367,30 @@ handle_vision_create_session (XdpDbusVision       *object,
   GDBusConnection *connection = g_dbus_method_invocation_get_connection (invocation);
   XdpRequest *request = xdp_request_from_invocation (invocation);
   VisionCreateSession *create;
+  g_autoptr(GError) error = NULL;
 
-  xdp_request_export (request, connection);
+  REQUEST_AUTOLOCK (request);
+
+  if (!model_request_export_with_impl (request,
+                                       connection,
+                                       G_DBUS_PROXY (vision->impl),
+                                       &error))
+    {
+      g_dbus_method_invocation_return_gerror (invocation, error);
+      return G_DBUS_METHOD_INVOCATION_HANDLED;
+    }
+
   create = vision_create_session_new (vision,
-                                      request,
-                                      app_info,
-                                      connection,
-                                      arg_options);
+                                       request,
+                                       app_info,
+                                       connection,
+                                       arg_options);
   xdp_dbus_impl_vision_call_create_session (vision->impl,
-                                            model_app_id_from_invocation (invocation, app_info),
-                                            arg_parent_window,
-                                            arg_use_case,
-                                            arg_instructions,
+                                             xdp_request_get_object_path (request),
+                                             model_app_id_from_invocation (invocation, app_info),
+                                             arg_parent_window,
+                                             arg_use_case,
+                                             arg_instructions,
                                             xdp_request_get_cancellable (request),
                                             vision_create_session_done,
                                             create);
@@ -399,14 +411,24 @@ handle_vision_prewarm (XdpDbusVision       *object,
   ModelSession *model_session;
   XdpRequest *request = xdp_request_from_invocation (invocation);
   VisionSignalForward *forward;
+  g_autoptr(GError) error = NULL;
 
   session = lookup_model_session (invocation, arg_session_handle, MODEL_SESSION_VISION);
   if (session == NULL)
     return G_DBUS_METHOD_INVOCATION_HANDLED;
 
+  REQUEST_AUTOLOCK (request);
   SESSION_AUTOLOCK (session);
   model_session = MODEL_SESSION (session);
-  xdp_request_export (request, g_dbus_method_invocation_get_connection (invocation));
+  if (!model_request_export_with_impl (request,
+                                       g_dbus_method_invocation_get_connection (invocation),
+                                       G_DBUS_PROXY (vision->impl),
+                                       &error))
+    {
+      g_dbus_method_invocation_return_gerror (invocation, error);
+      return G_DBUS_METHOD_INVOCATION_HANDLED;
+    }
+
   forward = vision_signal_forward_new (vision,
                                        vision->impl,
                                        request,
@@ -439,15 +461,25 @@ handle_vision_stream_describe (XdpDbusVision       *object,
   ModelSession *model_session;
   XdpRequest *request = xdp_request_from_invocation (invocation);
   VisionSignalForward *forward;
+  g_autoptr(GError) error = NULL;
 
   session = lookup_model_session (invocation, arg_session_handle, MODEL_SESSION_VISION);
   if (session == NULL)
     return G_DBUS_METHOD_INVOCATION_HANDLED;
 
+  REQUEST_AUTOLOCK (request);
   SESSION_AUTOLOCK (session);
   model_session = MODEL_SESSION (session);
 
-  xdp_request_export (request, g_dbus_method_invocation_get_connection (invocation));
+  if (!model_request_export_with_impl (request,
+                                       g_dbus_method_invocation_get_connection (invocation),
+                                       G_DBUS_PROXY (vision->impl),
+                                       &error))
+    {
+      g_dbus_method_invocation_return_gerror (invocation, error);
+      return G_DBUS_METHOD_INVOCATION_HANDLED;
+    }
+
   forward = vision_signal_forward_new (vision,
                                         vision->impl,
                                         request,
@@ -485,15 +517,25 @@ handle_vision_stream_ocr (XdpDbusVision       *object,
   ModelSession *model_session;
   XdpRequest *request = xdp_request_from_invocation (invocation);
   VisionSignalForward *forward;
+  g_autoptr(GError) error = NULL;
 
   session = lookup_model_session (invocation, arg_session_handle, MODEL_SESSION_VISION);
   if (session == NULL)
     return G_DBUS_METHOD_INVOCATION_HANDLED;
 
+  REQUEST_AUTOLOCK (request);
   SESSION_AUTOLOCK (session);
   model_session = MODEL_SESSION (session);
 
-  xdp_request_export (request, g_dbus_method_invocation_get_connection (invocation));
+  if (!model_request_export_with_impl (request,
+                                       g_dbus_method_invocation_get_connection (invocation),
+                                       G_DBUS_PROXY (vision->impl),
+                                       &error))
+    {
+      g_dbus_method_invocation_return_gerror (invocation, error);
+      return G_DBUS_METHOD_INVOCATION_HANDLED;
+    }
+
   forward = vision_signal_forward_new (vision,
                                         vision->impl,
                                         request,
@@ -531,15 +573,25 @@ handle_vision_stream_segment (XdpDbusVision       *object,
   ModelSession *model_session;
   XdpRequest *request = xdp_request_from_invocation (invocation);
   VisionSignalForward *forward;
+  g_autoptr(GError) error = NULL;
 
   session = lookup_model_session (invocation, arg_session_handle, MODEL_SESSION_VISION);
   if (session == NULL)
     return G_DBUS_METHOD_INVOCATION_HANDLED;
 
+  REQUEST_AUTOLOCK (request);
   SESSION_AUTOLOCK (session);
   model_session = MODEL_SESSION (session);
 
-  xdp_request_export (request, g_dbus_method_invocation_get_connection (invocation));
+  if (!model_request_export_with_impl (request,
+                                       g_dbus_method_invocation_get_connection (invocation),
+                                       G_DBUS_PROXY (vision->impl),
+                                       &error))
+    {
+      g_dbus_method_invocation_return_gerror (invocation, error);
+      return G_DBUS_METHOD_INVOCATION_HANDLED;
+    }
+
   forward = vision_signal_forward_new (vision,
                                         vision->impl,
                                         request,

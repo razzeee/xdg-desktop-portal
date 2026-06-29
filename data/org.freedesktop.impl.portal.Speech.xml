@@ -25,6 +25,7 @@
         verbatim source-language transcript or an English translation.
     -->
     <method name="CreateSession">
+      <arg type="s" name="request_id" direction="in"/>
       <arg type="s" name="app_id" direction="in"/>
       <arg type="s" name="parent_window" direction="in"/>
       <arg type="s" name="use_case" direction="in"/>

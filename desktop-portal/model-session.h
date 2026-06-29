@@ -42,6 +42,11 @@ const char *model_session_get_backend_session_id (ModelSession *session);
 GVariant *generation_options_from_vardict (GVariant  *arg_options,
                                            GError   **error);
 
+gboolean model_request_export_with_impl (XdpRequest      *request,
+                                         GDBusConnection *connection,
+                                         GDBusProxy      *impl_proxy,
+                                         GError         **error);
+
 void model_request_emit_response (XdpRequest  *request,
                                   guint        response,
                                   const char  *error_message);

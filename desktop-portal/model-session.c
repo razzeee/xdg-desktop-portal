@@ -7,6 +7,7 @@
 #include "model-session.h"
 
 #include <gio/gio.h>
+#include <string.h>
 
 #include "xdp-app-info.h"
 #include "xdp-context.h"
@@ -228,13 +229,47 @@ generation_options_from_vardict (GVariant  *arg_options,
                                              target_language_hint));
 }
 
+gboolean
+model_request_export_with_impl (XdpRequest      *request,
+                                GDBusConnection *connection,
+                                GDBusProxy      *impl_proxy,
+                                GError         **error)
+{
+  g_autoptr(XdpDbusImplRequest) impl_request = NULL;
+
+  impl_request = xdp_dbus_impl_request_proxy_new_sync (
+    g_dbus_proxy_get_connection (impl_proxy),
+    G_DBUS_PROXY_FLAGS_DO_NOT_LOAD_PROPERTIES,
+    g_dbus_proxy_get_name (impl_proxy),
+    xdp_request_get_object_path (request),
+    NULL,
+    error);
+  if (impl_request == NULL)
+    return FALSE;
+
+  xdp_request_set_impl_request (request, impl_request);
+  xdp_request_export (request, connection);
+  return TRUE;
+}
+
 static char *
 model_error_name_from_message (const char *error_message)
 {
+  const char *aileron_error;
   const char *candidate;
 
   if (error_message == NULL)
     return NULL;
+
+  aileron_error = strstr (error_message, "aileron.Inference.");
+  if (aileron_error != NULL)
+    {
+      const char *end = aileron_error;
+
+      while (g_ascii_isalnum (*end) || *end == '_' || *end == '.')
+        end++;
+      return g_strndup (aileron_error, end - aileron_error);
+    }
 
   for (candidate = error_message; *candidate != '\0'; candidate++)
     {

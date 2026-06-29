@@ -61,11 +61,10 @@
     <!--
         StreamResponse:
 
-        Starts streaming a language response. Output chunks are emitted as
-        TokenReceived signals for @session_handle while the method call is in
-        progress; the method reply only indicates that streaming has finished.
-        Clients should subscribe to TokenReceived before calling and consume
-        signals concurrently with the method call.
+        Starts streaming a language response. The method returns a Request
+        handle immediately. Output chunks are emitted as TokenReceived signals;
+        completion, cancellation, and failures are reported through the
+        Request::Response signal.
     -->
     <method name="StreamResponse">
       <arg type="o" name="session_handle" direction="in"/>
@@ -92,11 +91,10 @@
     <!--
         StreamRespondGuided:
 
-        Starts streaming guided JSON snapshots. Snapshots are emitted as
-        GuidedSnapshotReceived signals for @session_handle while the method call
-        is in progress; the method reply only indicates that streaming has
-        finished. Clients should subscribe before calling and consume signals
-        concurrently with the method call.
+        Starts streaming guided JSON snapshots. The method returns a Request
+        handle immediately. Snapshots and tool-call requests are emitted as
+        stream signals; completion, cancellation, and failures are reported
+        through the Request::Response signal.
     -->
     <method name="StreamRespondGuided">
       <arg type="o" name="session_handle" direction="in"/>

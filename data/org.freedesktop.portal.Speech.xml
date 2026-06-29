@@ -56,10 +56,9 @@
         argument is base64-encoded 16 kHz mono f32le PCM and must fit within
         the session bus message limit. @source_language_hint is the optional
         spoken input language hint.
-        Segments are emitted as TranscriptionReceived signals for
-        @session_handle while the method call is in progress; the method reply
-        only indicates that streaming has finished. Clients should subscribe
-        before calling and consume signals concurrently with the method call.
+        The method returns a Request handle immediately. Segments are emitted as
+        TranscriptionReceived signals; completion, cancellation, and failures
+        are reported through the Request::Response signal.
     -->
     <method name="StreamTranscribe">
       <arg type="o" name="session_handle" direction="in"/>

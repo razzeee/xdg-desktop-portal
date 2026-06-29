@@ -452,18 +452,30 @@ handle_language_create_session (XdpDbusLanguage      *object,
   GDBusConnection *connection = g_dbus_method_invocation_get_connection (invocation);
   XdpRequest *request = xdp_request_from_invocation (invocation);
   LanguageCreateSession *create;
+  g_autoptr(GError) error = NULL;
 
-  xdp_request_export (request, connection);
+  REQUEST_AUTOLOCK (request);
+
+  if (!model_request_export_with_impl (request,
+                                       connection,
+                                       G_DBUS_PROXY (language->impl),
+                                       &error))
+    {
+      g_dbus_method_invocation_return_gerror (invocation, error);
+      return G_DBUS_METHOD_INVOCATION_HANDLED;
+    }
+
   create = language_create_session_new (language,
-                                        request,
-                                        app_info,
-                                        connection,
-                                        arg_options);
+                                         request,
+                                         app_info,
+                                         connection,
+                                         arg_options);
   xdp_dbus_impl_language_call_create_session (language->impl,
-                                              model_app_id_from_invocation (invocation, app_info),
-                                              arg_parent_window,
-                                              arg_use_case,
-                                              arg_instructions,
+                                               xdp_request_get_object_path (request),
+                                               model_app_id_from_invocation (invocation, app_info),
+                                               arg_parent_window,
+                                               arg_use_case,
+                                               arg_instructions,
                                               xdp_request_get_cancellable (request),
                                               language_create_session_done,
                                               create);
@@ -484,14 +496,24 @@ handle_language_prewarm (XdpDbusLanguage      *object,
   ModelSession *model_session;
   XdpRequest *request = xdp_request_from_invocation (invocation);
   LanguageSignalForward *forward;
+  g_autoptr(GError) error = NULL;
 
   session = lookup_model_session (invocation, arg_session_handle, MODEL_SESSION_LANGUAGE);
   if (session == NULL)
     return G_DBUS_METHOD_INVOCATION_HANDLED;
 
+  REQUEST_AUTOLOCK (request);
   SESSION_AUTOLOCK (session);
   model_session = MODEL_SESSION (session);
-  xdp_request_export (request, g_dbus_method_invocation_get_connection (invocation));
+  if (!model_request_export_with_impl (request,
+                                       g_dbus_method_invocation_get_connection (invocation),
+                                       G_DBUS_PROXY (language->impl),
+                                       &error))
+    {
+      g_dbus_method_invocation_return_gerror (invocation, error);
+      return G_DBUS_METHOD_INVOCATION_HANDLED;
+    }
+
   forward = language_signal_forward_new (language,
                                           language->impl,
                                           request,
@@ -547,7 +569,16 @@ handle_language_stream_predict_next (XdpDbusLanguage      *object,
     session_handle = g_strdup (session->id);
   }
 
-  xdp_request_export (request, g_dbus_method_invocation_get_connection (invocation));
+  REQUEST_AUTOLOCK (request);
+  if (!model_request_export_with_impl (request,
+                                       g_dbus_method_invocation_get_connection (invocation),
+                                       G_DBUS_PROXY (language->impl),
+                                       &error))
+    {
+      g_dbus_method_invocation_return_gerror (invocation, error);
+      return G_DBUS_METHOD_INVOCATION_HANDLED;
+    }
+
   forward = language_signal_forward_new (language,
                                           language->impl,
                                           request,
@@ -600,10 +631,19 @@ handle_language_stream_response (XdpDbusLanguage      *object,
       return G_DBUS_METHOD_INVOCATION_HANDLED;
     }
 
+  REQUEST_AUTOLOCK (request);
   SESSION_AUTOLOCK (session);
   model_session = MODEL_SESSION (session);
 
-  xdp_request_export (request, g_dbus_method_invocation_get_connection (invocation));
+  if (!model_request_export_with_impl (request,
+                                       g_dbus_method_invocation_get_connection (invocation),
+                                       G_DBUS_PROXY (language->impl),
+                                       &error))
+    {
+      g_dbus_method_invocation_return_gerror (invocation, error);
+      return G_DBUS_METHOD_INVOCATION_HANDLED;
+    }
+
   forward = language_signal_forward_new (language,
                                           language->impl,
                                           request,
@@ -658,10 +698,19 @@ handle_language_stream_respond_guided (XdpDbusLanguage      *object,
       return G_DBUS_METHOD_INVOCATION_HANDLED;
     }
 
+  REQUEST_AUTOLOCK (request);
   SESSION_AUTOLOCK (session);
   model_session = MODEL_SESSION (session);
 
-  xdp_request_export (request, g_dbus_method_invocation_get_connection (invocation));
+  if (!model_request_export_with_impl (request,
+                                       g_dbus_method_invocation_get_connection (invocation),
+                                       G_DBUS_PROXY (language->impl),
+                                       &error))
+    {
+      g_dbus_method_invocation_return_gerror (invocation, error);
+      return G_DBUS_METHOD_INVOCATION_HANDLED;
+    }
+
   forward = language_signal_forward_new (language,
                                           language->impl,
                                           request,
@@ -723,10 +772,19 @@ handle_language_stream_submit_tool_results_guided (XdpDbusLanguage      *object,
       return G_DBUS_METHOD_INVOCATION_HANDLED;
     }
 
+  REQUEST_AUTOLOCK (request);
   SESSION_AUTOLOCK (session);
   model_session = MODEL_SESSION (session);
 
-  xdp_request_export (request, g_dbus_method_invocation_get_connection (invocation));
+  if (!model_request_export_with_impl (request,
+                                       g_dbus_method_invocation_get_connection (invocation),
+                                       G_DBUS_PROXY (language->impl),
+                                       &error))
+    {
+      g_dbus_method_invocation_return_gerror (invocation, error);
+      return G_DBUS_METHOD_INVOCATION_HANDLED;
+    }
+
   forward = language_signal_forward_new (language,
                                           language->impl,
                                           request,
@@ -772,15 +830,25 @@ handle_language_stream_embed (XdpDbusLanguage      *object,
   ModelSession *model_session;
   XdpRequest *request = xdp_request_from_invocation (invocation);
   LanguageSignalForward *forward;
+  g_autoptr(GError) error = NULL;
 
   session = lookup_model_session (invocation, arg_session_handle, MODEL_SESSION_LANGUAGE);
   if (session == NULL)
     return G_DBUS_METHOD_INVOCATION_HANDLED;
 
+  REQUEST_AUTOLOCK (request);
   SESSION_AUTOLOCK (session);
   model_session = MODEL_SESSION (session);
 
-  xdp_request_export (request, g_dbus_method_invocation_get_connection (invocation));
+  if (!model_request_export_with_impl (request,
+                                       g_dbus_method_invocation_get_connection (invocation),
+                                       G_DBUS_PROXY (language->impl),
+                                       &error))
+    {
+      g_dbus_method_invocation_return_gerror (invocation, error);
+      return G_DBUS_METHOD_INVOCATION_HANDLED;
+    }
+
   forward = language_signal_forward_new (language,
                                           language->impl,
                                           request,
