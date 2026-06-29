@@ -46,7 +46,7 @@
       <arg type="(xdsss)" name="options" direction="in"/>
     </method>
 
-    <!-- Stream payloads are emitted as GuidedSnapshotReceived signals while this call is in progress. -->
+    <!-- Stream payloads are emitted as GuidedSnapshotReceived and/or GuidedToolCallsReceived signals while this call is in progress. -->
     <method name="StreamRespondGuided">
       <arg type="s" name="request_id" direction="in"/>
       <arg type="s" name="session_id" direction="in"/>
@@ -56,6 +56,7 @@
       <arg type="(xdsss)" name="options" direction="in"/>
     </method>
 
+    <!-- Stream payloads are emitted as GuidedSnapshotReceived and/or GuidedToolCallsReceived signals while this call is in progress. -->
     <method name="StreamSubmitToolResultsGuided">
       <arg type="s" name="request_id" direction="in"/>
       <arg type="s" name="session_id" direction="in"/>

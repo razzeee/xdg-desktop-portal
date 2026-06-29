@@ -342,15 +342,19 @@ speech_create_session_done (GObject      *source,
       return;
     }
 
-  if (!xdp_session_export (session, &error))
-    {
-      xdp_session_close (session, FALSE);
-      model_request_emit_response (create->request, 2, error->message);
-      return;
-    }
+  {
+    SESSION_AUTOLOCK (session);
 
-  if (!model_request_register_session_and_emit_response (create->request, session))
-    xdp_session_close (session, FALSE);
+    if (!xdp_session_export (session, &error))
+      {
+        xdp_session_close (session, FALSE);
+        model_request_emit_response (create->request, 2, error->message);
+        return;
+      }
+
+    if (!model_request_register_session_and_emit_response (create->request, session))
+      xdp_session_close (session, FALSE);
+  }
 }
 
 static gboolean
@@ -423,6 +427,12 @@ handle_speech_prewarm (XdpDbusSpeech       *object,
   if (session == NULL)
     return G_DBUS_METHOD_INVOCATION_HANDLED;
 
+  if (!model_request_options_validate (arg_options, &error))
+    {
+      g_dbus_method_invocation_return_gerror (invocation, error);
+      return G_DBUS_METHOD_INVOCATION_HANDLED;
+    }
+
   REQUEST_AUTOLOCK (request);
   SESSION_AUTOLOCK (session);
   model_session = MODEL_SESSION (session);
@@ -475,6 +485,12 @@ handle_speech_stream_transcribe (XdpDbusSpeech       *object,
   session = lookup_model_session (invocation, arg_session_handle, MODEL_SESSION_SPEECH);
   if (session == NULL)
     return G_DBUS_METHOD_INVOCATION_HANDLED;
+
+  if (!model_request_options_validate (arg_options, &error))
+    {
+      g_dbus_method_invocation_return_gerror (invocation, error);
+      return G_DBUS_METHOD_INVOCATION_HANDLED;
+    }
 
   REQUEST_AUTOLOCK (request);
   SESSION_AUTOLOCK (session);

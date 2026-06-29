@@ -35,6 +35,7 @@ struct _ModelSessionClass
 G_DEFINE_TYPE (ModelSession, model_session, xdp_session_get_type ())
 
 static XdpOptionKey generation_options[] = {
+  { "handle_token", G_VARIANT_TYPE_STRING, NULL },
   { "maximum_response_tokens", G_VARIANT_TYPE_INT64, NULL },
   { "temperature", G_VARIANT_TYPE_DOUBLE, NULL },
   { "sampling_mode", G_VARIANT_TYPE_STRING, NULL },
@@ -43,7 +44,12 @@ static XdpOptionKey generation_options[] = {
 };
 
 static XdpOptionKey create_session_options[] = {
+  { "handle_token", G_VARIANT_TYPE_STRING, NULL },
   { "session_handle_token", G_VARIANT_TYPE_STRING, NULL },
+};
+
+static XdpOptionKey request_options[] = {
+  { "handle_token", G_VARIANT_TYPE_STRING, NULL },
 };
 
 void
@@ -318,6 +324,18 @@ model_session_options_validate (GVariant  *options,
     }
 
   return TRUE;
+}
+
+gboolean
+model_request_options_validate (GVariant  *options,
+                                GError   **error)
+{
+  g_auto(GVariantBuilder) options_builder =
+    G_VARIANT_BUILDER_INIT (G_VARIANT_TYPE_VARDICT);
+
+  return xdp_filter_options (options, &options_builder,
+                             request_options, G_N_ELEMENTS (request_options),
+                             NULL, error);
 }
 
 gboolean

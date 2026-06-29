@@ -66,9 +66,8 @@ xdp_request_handle_close (XdpDbusRequest        *object,
           !xdp_dbus_impl_request_call_close_sync (request->impl_request,
                                                    NULL, &error))
         {
-          if (invocation)
-            g_dbus_method_invocation_return_gerror (invocation, error);
-          return G_DBUS_METHOD_INVOCATION_HANDLED;
+          g_warning ("Failed to close request implementation: %s", error->message);
+          g_clear_error (&error);
         }
 
       if (request->cancellable)

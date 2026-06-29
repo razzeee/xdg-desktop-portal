@@ -376,15 +376,19 @@ vision_create_session_done (GObject      *source,
       return;
     }
 
-  if (!xdp_session_export (session, &error))
-    {
-      xdp_session_close (session, FALSE);
-      model_request_emit_response (create->request, 2, error->message);
-      return;
-    }
+  {
+    SESSION_AUTOLOCK (session);
 
-  if (!model_request_register_session_and_emit_response (create->request, session))
-    xdp_session_close (session, FALSE);
+    if (!xdp_session_export (session, &error))
+      {
+        xdp_session_close (session, FALSE);
+        model_request_emit_response (create->request, 2, error->message);
+        return;
+      }
+
+    if (!model_request_register_session_and_emit_response (create->request, session))
+      xdp_session_close (session, FALSE);
+  }
 }
 
 static gboolean
@@ -457,6 +461,12 @@ handle_vision_prewarm (XdpDbusVision       *object,
   if (session == NULL)
     return G_DBUS_METHOD_INVOCATION_HANDLED;
 
+  if (!model_request_options_validate (arg_options, &error))
+    {
+      g_dbus_method_invocation_return_gerror (invocation, error);
+      return G_DBUS_METHOD_INVOCATION_HANDLED;
+    }
+
   REQUEST_AUTOLOCK (request);
   SESSION_AUTOLOCK (session);
   model_session = MODEL_SESSION (session);
@@ -514,6 +524,12 @@ handle_vision_stream_describe (XdpDbusVision       *object,
                                             "vision.describe",
                                             "StreamDescribe"))
     return G_DBUS_METHOD_INVOCATION_HANDLED;
+
+  if (!model_request_options_validate (arg_options, &error))
+    {
+      g_dbus_method_invocation_return_gerror (invocation, error);
+      return G_DBUS_METHOD_INVOCATION_HANDLED;
+    }
 
   REQUEST_AUTOLOCK (request);
   SESSION_AUTOLOCK (session);
@@ -579,6 +595,12 @@ handle_vision_stream_ocr (XdpDbusVision       *object,
                                             "StreamOcr"))
     return G_DBUS_METHOD_INVOCATION_HANDLED;
 
+  if (!model_request_options_validate (arg_options, &error))
+    {
+      g_dbus_method_invocation_return_gerror (invocation, error);
+      return G_DBUS_METHOD_INVOCATION_HANDLED;
+    }
+
   REQUEST_AUTOLOCK (request);
   SESSION_AUTOLOCK (session);
   model_session = MODEL_SESSION (session);
@@ -642,6 +664,12 @@ handle_vision_stream_segment (XdpDbusVision       *object,
                                             "vision.segment",
                                             "StreamSegment"))
     return G_DBUS_METHOD_INVOCATION_HANDLED;
+
+  if (!model_request_options_validate (arg_options, &error))
+    {
+      g_dbus_method_invocation_return_gerror (invocation, error);
+      return G_DBUS_METHOD_INVOCATION_HANDLED;
+    }
 
   REQUEST_AUTOLOCK (request);
   SESSION_AUTOLOCK (session);

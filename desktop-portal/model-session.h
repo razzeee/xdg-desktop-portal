@@ -57,6 +57,9 @@ GVariant *generation_options_from_vardict (GVariant  *arg_options,
 gboolean model_session_options_validate (GVariant  *options,
                                          GError   **error);
 
+gboolean model_request_options_validate (GVariant  *options,
+                                         GError   **error);
+
 gboolean model_request_export_with_impl (XdpRequest      *request,
                                          GDBusConnection *connection,
                                          GDBusProxy      *impl_proxy,
