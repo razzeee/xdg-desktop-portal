@@ -23,6 +23,7 @@ struct _ModelSession
 
   ModelSessionKind kind;
   GObject *impl;
+  char *use_case;
   char *backend_session_id;
 };
 
@@ -39,6 +40,10 @@ static XdpOptionKey generation_options[] = {
   { "sampling_mode", G_VARIANT_TYPE_STRING, NULL },
   { "source_language_hint", G_VARIANT_TYPE_STRING, NULL },
   { "target_language_hint", G_VARIANT_TYPE_STRING, NULL },
+};
+
+static XdpOptionKey create_session_options[] = {
+  { "session_handle_token", G_VARIANT_TYPE_STRING, NULL },
 };
 
 void
@@ -97,6 +102,7 @@ model_session_finalize (GObject *object)
   ModelSession *session = MODEL_SESSION (object);
 
   g_clear_object (&session->impl);
+  g_clear_pointer (&session->use_case, g_free);
   g_clear_pointer (&session->backend_session_id, g_free);
 
   G_OBJECT_CLASS (model_session_parent_class)->finalize (object);
@@ -123,6 +129,7 @@ model_session_new (XdpContext       *context,
                    XdpAppInfo       *app_info,
                    GObject          *impl,
                    ModelSessionKind  kind,
+                   const char       *use_case,
                    GVariant         *options,
                    const char       *backend_session_id,
                    GError          **error)
@@ -152,6 +159,7 @@ model_session_new (XdpContext       *context,
   model_session = MODEL_SESSION (session);
   model_session->kind = kind;
   model_session->impl = g_object_ref (impl);
+  model_session->use_case = g_strdup (use_case);
   model_session->backend_session_id = g_strdup (backend_session_id);
 
   return model_session;
@@ -196,6 +204,47 @@ model_session_get_backend_session_id (ModelSession *session)
   return session->backend_session_id;
 }
 
+gboolean
+model_session_ensure_language_generation_use_case (GDBusMethodInvocation *invocation,
+                                                   ModelSession          *session)
+{
+  const char *use_case = session->use_case;
+
+  if (g_strcmp0 (use_case, "language.summarize") == 0 ||
+      g_strcmp0 (use_case, "language.translate") == 0 ||
+      g_strcmp0 (use_case, "language.rephrase") == 0 ||
+      g_strcmp0 (use_case, "language.classify") == 0 ||
+      g_strcmp0 (use_case, "language.extract") == 0 ||
+      g_strcmp0 (use_case, "language.analyze") == 0)
+    return TRUE;
+
+  g_dbus_method_invocation_return_error (invocation,
+                                         XDG_DESKTOP_PORTAL_ERROR,
+                                         XDG_DESKTOP_PORTAL_ERROR_INVALID_ARGUMENT,
+                                         "full text generation requires a language generation use-case, got %s",
+                                         use_case);
+  return FALSE;
+}
+
+gboolean
+model_session_ensure_exact_use_case (GDBusMethodInvocation *invocation,
+                                     ModelSession          *session,
+                                     const char            *expected_use_case,
+                                     const char            *method)
+{
+  if (g_strcmp0 (session->use_case, expected_use_case) == 0)
+    return TRUE;
+
+  g_dbus_method_invocation_return_error (invocation,
+                                         XDG_DESKTOP_PORTAL_ERROR,
+                                         XDG_DESKTOP_PORTAL_ERROR_INVALID_ARGUMENT,
+                                         "%s requires use-case %s, got %s",
+                                         method,
+                                         expected_use_case,
+                                         session->use_case);
+  return FALSE;
+}
+
 GVariant *
 generation_options_from_vardict (GVariant  *arg_options,
                                  GError   **error)
@@ -227,6 +276,32 @@ generation_options_from_vardict (GVariant  *arg_options,
                                             sampling_mode,
                                              source_language_hint,
                                              target_language_hint));
+}
+
+gboolean
+model_session_options_validate (GVariant  *options,
+                                GError   **error)
+{
+  g_auto(GVariantBuilder) options_builder =
+    G_VARIANT_BUILDER_INIT (G_VARIANT_TYPE_VARDICT);
+  const char *token;
+
+  if (!xdp_filter_options (options, &options_builder,
+                           create_session_options, G_N_ELEMENTS (create_session_options),
+                           NULL, error))
+    return FALSE;
+
+  token = lookup_session_token (options);
+  if (token != NULL && !xdp_is_valid_token (token))
+    {
+      g_set_error (error,
+                   XDG_DESKTOP_PORTAL_ERROR,
+                   XDG_DESKTOP_PORTAL_ERROR_INVALID_ARGUMENT,
+                   "Invalid token '%s'", token);
+      return FALSE;
+    }
+
+  return TRUE;
 }
 
 gboolean
@@ -329,9 +404,9 @@ model_request_emit_response (XdpRequest  *request,
   xdp_request_unexport (request);
 }
 
-void
-model_request_emit_session_response (XdpRequest  *request,
-                                     const char  *session_handle)
+gboolean
+model_request_register_session_and_emit_response (XdpRequest *request,
+                                                  XdpSession *session)
 {
   g_auto(GVariantBuilder) results_builder =
     G_VARIANT_BUILDER_INIT (G_VARIANT_TYPE_VARDICT);
@@ -339,14 +414,33 @@ model_request_emit_session_response (XdpRequest  *request,
   REQUEST_AUTOLOCK (request);
 
   if (!request->exported)
-    return;
+    return FALSE;
 
+  xdp_session_register (session);
   g_variant_builder_add (&results_builder, "{sv}", "session_handle",
-                         g_variant_new_object_path (session_handle));
+                         g_variant_new_object_path (session->id));
   xdp_dbus_request_emit_response (XDP_DBUS_REQUEST (request),
-                                  0,
-                                  g_variant_builder_end (&results_builder));
+                                   0,
+                                   g_variant_builder_end (&results_builder));
   xdp_request_unexport (request);
+  return TRUE;
+}
+
+guint
+model_response_from_error (GError *error)
+{
+  g_autofree char *remote_error = NULL;
+
+  if (g_error_matches (error, G_IO_ERROR, G_IO_ERROR_CANCELLED) ||
+      g_error_matches (error, XDG_DESKTOP_PORTAL_ERROR, XDG_DESKTOP_PORTAL_ERROR_CANCELLED) ||
+      (error->message != NULL && strstr (error->message, "RequestCancelled") != NULL))
+    return 1;
+
+  remote_error = g_dbus_error_get_remote_error (error);
+  if (g_strcmp0 (remote_error, "org.freedesktop.portal.Error.Cancelled") == 0)
+    return 1;
+
+  return 2;
 }
 
 gboolean

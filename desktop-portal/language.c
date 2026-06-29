@@ -73,6 +73,7 @@ typedef struct _LanguageCreateSession
   XdpRequest *request;
   XdpAppInfo *app_info;
   GDBusConnection *connection;
+  char *use_case;
   GVariant *options;
 } LanguageCreateSession;
 
@@ -81,6 +82,7 @@ language_create_session_new (Language       *language,
                              XdpRequest     *request,
                              XdpAppInfo     *app_info,
                              GDBusConnection *connection,
+                             const char     *use_case,
                              GVariant       *options)
 {
   LanguageCreateSession *create = g_new0 (LanguageCreateSession, 1);
@@ -89,6 +91,7 @@ language_create_session_new (Language       *language,
   create->request = g_object_ref (request);
   create->app_info = g_object_ref (app_info);
   create->connection = g_object_ref (connection);
+  create->use_case = g_strdup (use_case);
   create->options = g_variant_ref (options);
 
   return create;
@@ -101,6 +104,7 @@ language_create_session_free (LanguageCreateSession *create)
   g_clear_object (&create->request);
   g_clear_object (&create->app_info);
   g_clear_object (&create->connection);
+  g_clear_pointer (&create->use_case, g_free);
   g_clear_pointer (&create->options, g_variant_unref);
   g_free (create);
 }
@@ -165,6 +169,14 @@ language_emit_signal_to_request (LanguageSignalForward *forward,
                                  const char            *signal_name,
                                  GVariant              *parameters)
 {
+  REQUEST_AUTOLOCK (forward->request);
+
+  if (!forward->request->exported)
+    {
+      g_variant_unref (parameters);
+      return;
+    }
+
   g_dbus_connection_emit_signal (xdp_context_get_connection (forward->language->context),
                                  forward->request->sender,
                                  DESKTOP_DBUS_PATH,
@@ -240,9 +252,9 @@ finish_language_call (GObject      *source,
 
   if (!ok)
     {
-      guint response = g_error_matches (error, G_IO_ERROR, G_IO_ERROR_CANCELLED) ? 1 : 2;
-
-      model_request_emit_response (forward->request, response, error->message);
+      model_request_emit_response (forward->request,
+                                   model_response_from_error (error),
+                                   error->message);
       language_signal_forward_unref (forward);
       return;
     }
@@ -415,7 +427,7 @@ language_create_session_done (GObject      *source,
   XdpDbusImplLanguage *impl = XDP_DBUS_IMPL_LANGUAGE (source);
   g_autoptr(LanguageCreateSession) create = user_data;
   g_autofree char *backend_session_id = NULL;
-  g_autoptr(XdpSession) session = NULL;
+  XdpSession *session = NULL;
   g_autoptr(GError) error = NULL;
 
   if (!xdp_dbus_impl_language_call_create_session_finish (impl,
@@ -423,9 +435,9 @@ language_create_session_done (GObject      *source,
                                                           result,
                                                           &error))
     {
-      guint response = g_error_matches (error, G_IO_ERROR, G_IO_ERROR_CANCELLED) ? 1 : 2;
-
-      model_request_emit_response (create->request, response, error->message);
+      model_request_emit_response (create->request,
+                                   model_response_from_error (error),
+                                   error->message);
       return;
     }
 
@@ -442,6 +454,7 @@ language_create_session_done (GObject      *source,
                                             create->app_info,
                                             G_OBJECT (create->language->impl),
                                             MODEL_SESSION_LANGUAGE,
+                                            create->use_case,
                                             create->options,
                                             backend_session_id,
                                             &error));
@@ -461,8 +474,8 @@ language_create_session_done (GObject      *source,
       return;
     }
 
-  xdp_session_register (session);
-  model_request_emit_session_response (create->request, session->id);
+  if (!model_request_register_session_and_emit_response (create->request, session))
+    xdp_session_close (session, FALSE);
 }
 
 static gboolean
@@ -482,6 +495,12 @@ handle_language_create_session (XdpDbusLanguage      *object,
 
   REQUEST_AUTOLOCK (request);
 
+  if (!model_session_options_validate (arg_options, &error))
+    {
+      g_dbus_method_invocation_return_gerror (invocation, error);
+      return G_DBUS_METHOD_INVOCATION_HANDLED;
+    }
+
   if (!model_request_export_with_impl (request,
                                        connection,
                                        G_DBUS_PROXY (language->impl),
@@ -492,10 +511,11 @@ handle_language_create_session (XdpDbusLanguage      *object,
     }
 
   create = language_create_session_new (language,
-                                         request,
-                                         app_info,
-                                         connection,
-                                         arg_options);
+                                          request,
+                                          app_info,
+                                          connection,
+                                          arg_use_case,
+                                          arg_options);
   xdp_dbus_impl_language_call_create_session (language->impl,
                                                xdp_request_get_object_path (request),
                                                model_app_id_from_invocation (invocation, app_info),
@@ -581,6 +601,12 @@ handle_language_stream_predict_next (XdpDbusLanguage      *object,
   if (session == NULL)
     return G_DBUS_METHOD_INVOCATION_HANDLED;
 
+  if (!model_session_ensure_exact_use_case (invocation,
+                                            MODEL_SESSION (session),
+                                            "language.complete",
+                                            "StreamPredictNext"))
+    return G_DBUS_METHOD_INVOCATION_HANDLED;
+
   options = generation_options_from_vardict (arg_options, &error);
   if (options == NULL)
     {
@@ -650,6 +676,9 @@ handle_language_stream_response (XdpDbusLanguage      *object,
   if (session == NULL)
     return G_DBUS_METHOD_INVOCATION_HANDLED;
 
+  if (!model_session_ensure_language_generation_use_case (invocation, MODEL_SESSION (session)))
+    return G_DBUS_METHOD_INVOCATION_HANDLED;
+
   options = generation_options_from_vardict (arg_options, &error);
   if (options == NULL)
     {
@@ -715,6 +744,9 @@ handle_language_stream_respond_guided (XdpDbusLanguage      *object,
 
   session = lookup_model_session (invocation, arg_session_handle, MODEL_SESSION_LANGUAGE);
   if (session == NULL)
+    return G_DBUS_METHOD_INVOCATION_HANDLED;
+
+  if (!model_session_ensure_language_generation_use_case (invocation, MODEL_SESSION (session)))
     return G_DBUS_METHOD_INVOCATION_HANDLED;
 
   options = generation_options_from_vardict (arg_options, &error);
@@ -791,6 +823,9 @@ handle_language_stream_submit_tool_results_guided (XdpDbusLanguage      *object,
   if (session == NULL)
     return G_DBUS_METHOD_INVOCATION_HANDLED;
 
+  if (!model_session_ensure_language_generation_use_case (invocation, MODEL_SESSION (session)))
+    return G_DBUS_METHOD_INVOCATION_HANDLED;
+
   options = generation_options_from_vardict (arg_options, &error);
   if (options == NULL)
     {
@@ -860,6 +895,12 @@ handle_language_stream_embed (XdpDbusLanguage      *object,
 
   session = lookup_model_session (invocation, arg_session_handle, MODEL_SESSION_LANGUAGE);
   if (session == NULL)
+    return G_DBUS_METHOD_INVOCATION_HANDLED;
+
+  if (!model_session_ensure_exact_use_case (invocation,
+                                            MODEL_SESSION (session),
+                                            "language.embed",
+                                            "StreamEmbed"))
     return G_DBUS_METHOD_INVOCATION_HANDLED;
 
   REQUEST_AUTOLOCK (request);

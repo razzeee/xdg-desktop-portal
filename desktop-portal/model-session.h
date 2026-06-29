@@ -26,6 +26,7 @@ ModelSession *model_session_new (XdpContext       *context,
                                  XdpAppInfo       *app_info,
                                  GObject          *impl,
                                  ModelSessionKind  kind,
+                                 const char       *use_case,
                                  GVariant         *options,
                                  const char       *backend_session_id,
                                  GError          **error);
@@ -39,8 +40,19 @@ const char *model_app_id_from_invocation (GDBusMethodInvocation *invocation,
 
 const char *model_session_get_backend_session_id (ModelSession *session);
 
+gboolean model_session_ensure_language_generation_use_case (GDBusMethodInvocation *invocation,
+                                                            ModelSession          *session);
+
+gboolean model_session_ensure_exact_use_case (GDBusMethodInvocation *invocation,
+                                              ModelSession          *session,
+                                              const char            *expected_use_case,
+                                              const char            *method);
+
 GVariant *generation_options_from_vardict (GVariant  *arg_options,
                                            GError   **error);
+
+gboolean model_session_options_validate (GVariant  *options,
+                                         GError   **error);
 
 gboolean model_request_export_with_impl (XdpRequest      *request,
                                          GDBusConnection *connection,
@@ -51,8 +63,10 @@ void model_request_emit_response (XdpRequest  *request,
                                   guint        response,
                                   const char  *error_message);
 
-void model_request_emit_session_response (XdpRequest  *request,
-                                          const char  *session_handle);
+gboolean model_request_register_session_and_emit_response (XdpRequest *request,
+                                                           XdpSession *session);
+
+guint model_response_from_error (GError *error);
 
 gboolean model_request_is_exported (XdpRequest *request);
 

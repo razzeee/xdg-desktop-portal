@@ -70,6 +70,7 @@ typedef struct _VisionCreateSession
   XdpRequest *request;
   XdpAppInfo *app_info;
   GDBusConnection *connection;
+  char *use_case;
   GVariant *options;
 } VisionCreateSession;
 
@@ -78,6 +79,7 @@ vision_create_session_new (Vision         *vision,
                            XdpRequest     *request,
                            XdpAppInfo     *app_info,
                            GDBusConnection *connection,
+                           const char     *use_case,
                            GVariant       *options)
 {
   VisionCreateSession *create = g_new0 (VisionCreateSession, 1);
@@ -86,6 +88,7 @@ vision_create_session_new (Vision         *vision,
   create->request = g_object_ref (request);
   create->app_info = g_object_ref (app_info);
   create->connection = g_object_ref (connection);
+  create->use_case = g_strdup (use_case);
   create->options = g_variant_ref (options);
 
   return create;
@@ -98,6 +101,7 @@ vision_create_session_free (VisionCreateSession *create)
   g_clear_object (&create->request);
   g_clear_object (&create->app_info);
   g_clear_object (&create->connection);
+  g_clear_pointer (&create->use_case, g_free);
   g_clear_pointer (&create->options, g_variant_unref);
   g_free (create);
 }
@@ -158,6 +162,14 @@ vision_emit_signal_to_request (VisionSignalForward *forward,
                                const char          *signal_name,
                                GVariant            *parameters)
 {
+  REQUEST_AUTOLOCK (forward->request);
+
+  if (!forward->request->exported)
+    {
+      g_variant_unref (parameters);
+      return;
+    }
+
   g_dbus_connection_emit_signal (xdp_context_get_connection (forward->vision->context),
                                  forward->request->sender,
                                  DESKTOP_DBUS_PATH,
@@ -227,9 +239,9 @@ finish_vision_call (GObject      *source,
 
   if (!ok)
     {
-      guint response = g_error_matches (error, G_IO_ERROR, G_IO_ERROR_CANCELLED) ? 1 : 2;
-
-      model_request_emit_response (forward->request, response, error->message);
+      model_request_emit_response (forward->request,
+                                   model_response_from_error (error),
+                                   error->message);
       vision_signal_forward_unref (forward);
       return;
     }
@@ -324,7 +336,7 @@ vision_create_session_done (GObject      *source,
   XdpDbusImplVision *impl = XDP_DBUS_IMPL_VISION (source);
   g_autoptr(VisionCreateSession) create = user_data;
   g_autofree char *backend_session_id = NULL;
-  g_autoptr(XdpSession) session = NULL;
+  XdpSession *session = NULL;
   g_autoptr(GError) error = NULL;
 
   if (!xdp_dbus_impl_vision_call_create_session_finish (impl,
@@ -332,9 +344,9 @@ vision_create_session_done (GObject      *source,
                                                         result,
                                                         &error))
     {
-      guint response = g_error_matches (error, G_IO_ERROR, G_IO_ERROR_CANCELLED) ? 1 : 2;
-
-      model_request_emit_response (create->request, response, error->message);
+      model_request_emit_response (create->request,
+                                   model_response_from_error (error),
+                                   error->message);
       return;
     }
 
@@ -351,6 +363,7 @@ vision_create_session_done (GObject      *source,
                                             create->app_info,
                                             G_OBJECT (create->vision->impl),
                                             MODEL_SESSION_VISION,
+                                            create->use_case,
                                             create->options,
                                             backend_session_id,
                                             &error));
@@ -370,8 +383,8 @@ vision_create_session_done (GObject      *source,
       return;
     }
 
-  xdp_session_register (session);
-  model_request_emit_session_response (create->request, session->id);
+  if (!model_request_register_session_and_emit_response (create->request, session))
+    xdp_session_close (session, FALSE);
 }
 
 static gboolean
@@ -391,6 +404,12 @@ handle_vision_create_session (XdpDbusVision       *object,
 
   REQUEST_AUTOLOCK (request);
 
+  if (!model_session_options_validate (arg_options, &error))
+    {
+      g_dbus_method_invocation_return_gerror (invocation, error);
+      return G_DBUS_METHOD_INVOCATION_HANDLED;
+    }
+
   if (!model_request_export_with_impl (request,
                                        connection,
                                        G_DBUS_PROXY (vision->impl),
@@ -404,6 +423,7 @@ handle_vision_create_session (XdpDbusVision       *object,
                                        request,
                                        app_info,
                                        connection,
+                                       arg_use_case,
                                        arg_options);
   xdp_dbus_impl_vision_call_create_session (vision->impl,
                                              xdp_request_get_object_path (request),
@@ -487,6 +507,12 @@ handle_vision_stream_describe (XdpDbusVision       *object,
   if (session == NULL)
     return G_DBUS_METHOD_INVOCATION_HANDLED;
 
+  if (!model_session_ensure_exact_use_case (invocation,
+                                            MODEL_SESSION (session),
+                                            "vision.describe",
+                                            "StreamDescribe"))
+    return G_DBUS_METHOD_INVOCATION_HANDLED;
+
   REQUEST_AUTOLOCK (request);
   SESSION_AUTOLOCK (session);
   model_session = MODEL_SESSION (session);
@@ -543,6 +569,12 @@ handle_vision_stream_ocr (XdpDbusVision       *object,
   if (session == NULL)
     return G_DBUS_METHOD_INVOCATION_HANDLED;
 
+  if (!model_session_ensure_exact_use_case (invocation,
+                                            MODEL_SESSION (session),
+                                            "vision.ocr",
+                                            "StreamOcr"))
+    return G_DBUS_METHOD_INVOCATION_HANDLED;
+
   REQUEST_AUTOLOCK (request);
   SESSION_AUTOLOCK (session);
   model_session = MODEL_SESSION (session);
@@ -597,6 +629,12 @@ handle_vision_stream_segment (XdpDbusVision       *object,
 
   session = lookup_model_session (invocation, arg_session_handle, MODEL_SESSION_VISION);
   if (session == NULL)
+    return G_DBUS_METHOD_INVOCATION_HANDLED;
+
+  if (!model_session_ensure_exact_use_case (invocation,
+                                            MODEL_SESSION (session),
+                                            "vision.segment",
+                                            "StreamSegment"))
     return G_DBUS_METHOD_INVOCATION_HANDLED;
 
   REQUEST_AUTOLOCK (request);
