@@ -28,7 +28,6 @@ ModelSession *model_session_new (XdpContext       *context,
                                  ModelSessionKind  kind,
                                  const char       *use_case,
                                  GVariant         *options,
-                                 const char       *backend_session_id,
                                  GError          **error);
 
 XdpSession *lookup_model_session (GDBusMethodInvocation *invocation,
@@ -37,8 +36,6 @@ XdpSession *lookup_model_session (GDBusMethodInvocation *invocation,
 
 const char *model_app_id_from_invocation (GDBusMethodInvocation *invocation,
                                           XdpAppInfo            *app_info);
-
-const char *model_session_get_backend_session_id (ModelSession *session);
 
 gboolean model_session_ensure_language_generation_use_case (GDBusMethodInvocation *invocation,
                                                             ModelSession          *session);
@@ -75,7 +72,3 @@ gboolean model_request_register_session_and_emit_response (XdpRequest *request,
 guint model_response_from_error (GError *error);
 
 gboolean model_request_is_exported (XdpRequest *request);
-
-void end_backend_session (GObject          *impl,
-                          ModelSessionKind  kind,
-                          const char       *backend_session_id);

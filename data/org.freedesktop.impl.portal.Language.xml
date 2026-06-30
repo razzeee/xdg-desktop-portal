@@ -17,39 +17,39 @@
     </method>
 
     <method name="CreateSession">
-      <arg type="s" name="request_id" direction="in"/>
+      <arg type="o" name="handle" direction="in"/>
+      <arg type="o" name="session_handle" direction="in"/>
       <arg type="s" name="app_id" direction="in"/>
       <arg type="s" name="parent_window" direction="in"/>
       <arg type="s" name="use_case" direction="in"/>
       <arg type="s" name="instructions" direction="in"/>
-      <arg type="s" name="session_id" direction="out"/>
     </method>
 
     <method name="Prewarm">
-      <arg type="s" name="request_id" direction="in"/>
-      <arg type="s" name="session_id" direction="in"/>
+      <arg type="o" name="handle" direction="in"/>
+      <arg type="o" name="session_handle" direction="in"/>
     </method>
 
     <!-- Stream payloads are emitted as TokenReceived signals while this call is in progress. -->
     <method name="StreamResponse">
-      <arg type="s" name="request_id" direction="in"/>
-      <arg type="s" name="session_id" direction="in"/>
+      <arg type="o" name="handle" direction="in"/>
+      <arg type="o" name="session_handle" direction="in"/>
       <arg type="s" name="prompt" direction="in"/>
       <arg type="(xdsss)" name="options" direction="in"/>
     </method>
 
     <!-- Stream payloads are emitted as PredictionReceived signals while this call is in progress. Newer calls for the same session supersede older in-flight prediction calls. -->
     <method name="StreamPredictNext">
-      <arg type="s" name="request_id" direction="in"/>
-      <arg type="s" name="session_id" direction="in"/>
+      <arg type="o" name="handle" direction="in"/>
+      <arg type="o" name="session_handle" direction="in"/>
       <arg type="s" name="prefix" direction="in"/>
       <arg type="(xdsss)" name="options" direction="in"/>
     </method>
 
     <!-- Stream payloads are emitted as GuidedSnapshotReceived and/or GuidedToolCallsReceived signals while this call is in progress. -->
     <method name="StreamRespondGuided">
-      <arg type="s" name="request_id" direction="in"/>
-      <arg type="s" name="session_id" direction="in"/>
+      <arg type="o" name="handle" direction="in"/>
+      <arg type="o" name="session_handle" direction="in"/>
       <arg type="s" name="prompt" direction="in"/>
       <arg type="a(sssb)" name="fields" direction="in"/>
       <arg type="a(sss)" name="tools" direction="in"/>
@@ -58,8 +58,8 @@
 
     <!-- Stream payloads are emitted as GuidedSnapshotReceived and/or GuidedToolCallsReceived signals while this call is in progress. -->
     <method name="StreamSubmitToolResultsGuided">
-      <arg type="s" name="request_id" direction="in"/>
-      <arg type="s" name="session_id" direction="in"/>
+      <arg type="o" name="handle" direction="in"/>
+      <arg type="o" name="session_handle" direction="in"/>
       <arg type="s" name="prompt" direction="in"/>
       <arg type="a(sss)" name="results" direction="in"/>
       <arg type="a(sssb)" name="fields" direction="in"/>
@@ -68,52 +68,48 @@
     </method>
 
     <method name="StreamEmbed">
-      <arg type="s" name="request_id" direction="in"/>
-      <arg type="s" name="session_id" direction="in"/>
+      <arg type="o" name="handle" direction="in"/>
+      <arg type="o" name="session_handle" direction="in"/>
       <arg type="s" name="text" direction="in"/>
     </method>
 
-    <method name="EndSession">
-      <arg type="s" name="session_id" direction="in"/>
-    </method>
-
     <signal name="ModelLoading">
-      <arg type="s" name="request_id"/>
-      <arg type="s" name="session_id"/>
+      <arg type="o" name="handle"/>
+      <arg type="o" name="session_handle"/>
       <arg type="s" name="message"/>
     </signal>
 
     <signal name="TokenReceived">
-      <arg type="s" name="request_id"/>
-      <arg type="s" name="session_id"/>
+      <arg type="o" name="handle"/>
+      <arg type="o" name="session_handle"/>
       <arg type="s" name="token"/>
       <arg type="b" name="done"/>
     </signal>
 
     <signal name="PredictionReceived">
-      <arg type="s" name="request_id"/>
-      <arg type="s" name="session_id"/>
+      <arg type="o" name="handle"/>
+      <arg type="o" name="session_handle"/>
       <arg type="s" name="completion"/>
       <arg type="b" name="done"/>
     </signal>
 
     <signal name="GuidedSnapshotReceived">
-      <arg type="s" name="request_id"/>
-      <arg type="s" name="session_id"/>
+      <arg type="o" name="handle"/>
+      <arg type="o" name="session_handle"/>
       <arg type="s" name="snapshot_json"/>
       <arg type="b" name="done"/>
     </signal>
 
     <signal name="GuidedToolCallsReceived">
-      <arg type="s" name="request_id"/>
-      <arg type="s" name="session_id"/>
+      <arg type="o" name="handle"/>
+      <arg type="o" name="session_handle"/>
       <arg type="a(sss)" name="tool_calls"/>
       <arg type="b" name="done"/>
     </signal>
 
     <signal name="EmbeddingReceived">
-      <arg type="s" name="request_id"/>
-      <arg type="s" name="session_id"/>
+      <arg type="o" name="handle"/>
+      <arg type="o" name="session_handle"/>
       <arg type="ad" name="embedding"/>
       <arg type="b" name="done"/>
     </signal>

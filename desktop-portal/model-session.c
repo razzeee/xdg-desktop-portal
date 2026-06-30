@@ -24,7 +24,6 @@ struct _ModelSession
   ModelSessionKind kind;
   GObject *impl;
   char *use_case;
-  char *backend_session_id;
 };
 
 struct _ModelSessionClass
@@ -52,54 +51,10 @@ static XdpOptionKey request_options[] = {
   { "handle_token", G_VARIANT_TYPE_STRING, NULL },
 };
 
-void
-end_backend_session (GObject          *impl,
-                     ModelSessionKind  kind,
-                     const char       *backend_session_id)
-{
-  g_autoptr(GError) error = NULL;
-
-  if (backend_session_id == NULL || impl == NULL)
-    return;
-
-  switch (kind)
-    {
-    case MODEL_SESSION_LANGUAGE:
-      if (!xdp_dbus_impl_language_call_end_session_sync (XDP_DBUS_IMPL_LANGUAGE (impl),
-                                                         backend_session_id,
-                                                         NULL,
-                                                         &error))
-        g_warning ("Failed to close language model session: %s", error->message);
-      break;
-
-    case MODEL_SESSION_SPEECH:
-      if (!xdp_dbus_impl_speech_call_end_session_sync (XDP_DBUS_IMPL_SPEECH (impl),
-                                                       backend_session_id,
-                                                       NULL,
-                                                       &error))
-        g_warning ("Failed to close speech model session: %s", error->message);
-      break;
-
-    case MODEL_SESSION_VISION:
-      if (!xdp_dbus_impl_vision_call_end_session_sync (XDP_DBUS_IMPL_VISION (impl),
-                                                       backend_session_id,
-                                                       NULL,
-                                                       &error))
-        g_warning ("Failed to close vision model session: %s", error->message);
-      break;
-    }
-}
-
 static void
 model_session_close (XdpSession *session)
 {
-  ModelSession *model_session = MODEL_SESSION (session);
-
-  end_backend_session (model_session->impl,
-                       model_session->kind,
-                       model_session->backend_session_id);
-
-  g_clear_pointer (&model_session->backend_session_id, g_free);
+  /* The shared XdpSession close path calls org.freedesktop.impl.portal.Session.Close. */
 }
 
 static void
@@ -109,7 +64,6 @@ model_session_finalize (GObject *object)
 
   g_clear_object (&session->impl);
   g_clear_pointer (&session->use_case, g_free);
-  g_clear_pointer (&session->backend_session_id, g_free);
 
   G_OBJECT_CLASS (model_session_parent_class)->finalize (object);
 }
@@ -137,10 +91,11 @@ model_session_new (XdpContext       *context,
                    ModelSessionKind  kind,
                    const char       *use_case,
                    GVariant         *options,
-                   const char       *backend_session_id,
                    GError          **error)
 {
   g_autofree char *generated_token = NULL;
+  GDBusConnection *impl_connection = g_dbus_proxy_get_connection (G_DBUS_PROXY (impl));
+  const char *impl_dbus_name = g_dbus_proxy_get_name (G_DBUS_PROXY (impl));
   const char *token;
   XdpSession *session;
   ModelSession *model_session;
@@ -158,6 +113,8 @@ model_session_new (XdpContext       *context,
                             "app-id", xdp_app_info_get_id (app_info),
                             "token", token,
                             "connection", connection,
+                            "impl-connection", impl_connection,
+                            "impl-dbus-name", impl_dbus_name,
                             NULL);
   if (session == NULL)
     return NULL;
@@ -166,7 +123,6 @@ model_session_new (XdpContext       *context,
   model_session->kind = kind;
   model_session->impl = g_object_ref (impl);
   model_session->use_case = g_strdup (use_case);
-  model_session->backend_session_id = g_strdup (backend_session_id);
 
   return model_session;
 }
@@ -202,12 +158,6 @@ model_app_id_from_invocation (GDBusMethodInvocation *invocation,
     return g_dbus_method_invocation_get_sender (invocation);
 
   return app_id;
-}
-
-const char *
-model_session_get_backend_session_id (ModelSession *session)
-{
-  return session->backend_session_id;
 }
 
 gboolean
@@ -257,7 +207,7 @@ model_session_ensure_open (GDBusMethodInvocation *invocation,
 {
   XdpSession *xdp_session = XDP_SESSION (session);
 
-  if (!xdp_session->closed && session->backend_session_id != NULL)
+  if (!xdp_session->closed)
     return TRUE;
 
   g_dbus_method_invocation_return_error (invocation,

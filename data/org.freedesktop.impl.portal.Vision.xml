@@ -25,17 +25,17 @@
         the session. Create separate sessions for different vision tasks.
     -->
     <method name="CreateSession">
-      <arg type="s" name="request_id" direction="in"/>
+      <arg type="o" name="handle" direction="in"/>
+      <arg type="o" name="session_handle" direction="in"/>
       <arg type="s" name="app_id" direction="in"/>
       <arg type="s" name="parent_window" direction="in"/>
       <arg type="s" name="use_case" direction="in"/>
       <arg type="s" name="instructions" direction="in"/>
-      <arg type="s" name="session_id" direction="out"/>
     </method>
 
     <method name="Prewarm">
-      <arg type="s" name="request_id" direction="in"/>
-      <arg type="s" name="session_id" direction="in"/>
+      <arg type="o" name="handle" direction="in"/>
+      <arg type="o" name="session_handle" direction="in"/>
     </method>
 
     <!--
@@ -45,8 +45,8 @@
         VisionTextReceived signals while this call is in progress.
     -->
     <method name="StreamDescribe">
-      <arg type="s" name="request_id" direction="in"/>
-      <arg type="s" name="session_id" direction="in"/>
+      <arg type="o" name="handle" direction="in"/>
+      <arg type="o" name="session_handle" direction="in"/>
       <arg type="s" name="image" direction="in"/>
     </method>
 
@@ -57,8 +57,8 @@
         while this call is in progress.
     -->
     <method name="StreamOcr">
-      <arg type="s" name="request_id" direction="in"/>
-      <arg type="s" name="session_id" direction="in"/>
+      <arg type="o" name="handle" direction="in"/>
+      <arg type="o" name="session_handle" direction="in"/>
       <arg type="s" name="image" direction="in"/>
     </method>
 
@@ -71,31 +71,27 @@
         range relative to the image dimensions.
     -->
     <method name="StreamSegment">
-      <arg type="s" name="request_id" direction="in"/>
-      <arg type="s" name="session_id" direction="in"/>
+      <arg type="o" name="handle" direction="in"/>
+      <arg type="o" name="session_handle" direction="in"/>
       <arg type="s" name="image" direction="in"/>
     </method>
 
-    <method name="EndSession">
-      <arg type="s" name="session_id" direction="in"/>
-    </method>
-
     <signal name="ModelLoading">
-      <arg type="s" name="request_id"/>
-      <arg type="s" name="session_id"/>
+      <arg type="o" name="handle"/>
+      <arg type="o" name="session_handle"/>
       <arg type="s" name="message"/>
     </signal>
 
     <signal name="VisionTextReceived">
-      <arg type="s" name="request_id"/>
-      <arg type="s" name="session_id"/>
+      <arg type="o" name="handle"/>
+      <arg type="o" name="session_handle"/>
       <arg type="s" name="text"/>
       <arg type="b" name="done"/>
     </signal>
 
     <signal name="VisionSegmentsReceived">
-      <arg type="s" name="request_id"/>
-      <arg type="s" name="session_id"/>
+      <arg type="o" name="handle"/>
+      <arg type="o" name="session_handle"/>
       <arg type="a(sddddd)" name="segments"/>
       <arg type="b" name="done"/>
     </signal>

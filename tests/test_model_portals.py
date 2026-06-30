@@ -49,23 +49,46 @@ class TestModelPortals:
         assert len(method_calls) > 0
         _, args = method_calls[-1]
         assert args[0] == request.handle
-        assert args[1] == xdp_app_info.app_id
-        assert args[2] == ""
-        assert args[3] == use_case
-        assert args[4] == instructions
+        assert args[1] == response.results["session_handle"]
+        assert args[2] == xdp_app_info.app_id
+        assert args[3] == ""
+        assert args[4] == use_case
+        assert args[5] == instructions
 
     @pytest.mark.parametrize("template_params", ({"language": {"expect-close": True}},))
-    def test_create_session_close_propagates_to_impl_request(self, portals, dbus_con):
+    def test_create_session_close_propagates_to_impl_request_and_session(
+        self, portals, dbus_con
+    ):
         language_intf = xdp.get_portal_iface(dbus_con, "Language")
+        mock_intf = xdp.get_mock_iface(dbus_con)
+        session_closed_handles = []
 
-        request = xdp.Request(dbus_con, language_intf)
-        request.schedule_close(1000)
-        request.call(
-            "CreateSession",
-            parent_window="",
-            use_case="language.summarize",
-            instructions="Summarize clearly.",
-            options={},
+        def cb_impl_session_closed(handle):
+            session_closed_handles.append(str(handle))
+
+        signal_match = dbus_con.add_signal_receiver(
+            cb_impl_session_closed,
+            "SessionClosed",
+            dbus_interface="org.freedesktop.impl.portal.Mock",
         )
 
-        assert request.closed
+        request = xdp.Request(dbus_con, language_intf)
+        try:
+            request.schedule_close(1000)
+            request.call(
+                "CreateSession",
+                parent_window="",
+                use_case="language.summarize",
+                instructions="Summarize clearly.",
+                options={},
+            )
+
+            assert request.closed
+
+            method_calls = mock_intf.GetMethodCalls("CreateSession")
+            assert len(method_calls) > 0
+            _, args = method_calls[-1]
+            session_handle = str(args[1])
+            xdp.wait_for(lambda: session_handle in session_closed_handles)
+        finally:
+            signal_match.remove()

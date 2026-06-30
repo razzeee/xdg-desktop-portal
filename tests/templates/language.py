@@ -4,7 +4,7 @@
 # This file is formatted with Python Black
 # mypy: disable-error-code="misc"
 
-from tests.templates.xdp_utils import Response, init_logger, ImplRequest
+from tests.templates.xdp_utils import Response, init_logger, ImplRequest, ImplSession
 
 import dbus.service
 from dataclasses import dataclass
@@ -35,6 +35,7 @@ def load(mock, parameters={}):
         session_id=parameters.get("session-id", "language-session-1"),
         expect_close=parameters.get("expect-close", False),
     )
+    mock.language_sessions = {}
 
 
 @dbus.service.method(MAIN_IFACE, in_signature="ss", out_signature="(bss)")
@@ -45,13 +46,14 @@ def GetUseCaseAvailability(self, app_id, use_case):
 
 @dbus.service.method(
     MAIN_IFACE,
-    in_signature="sssss",
-    out_signature="s",
+    in_signature="oossss",
+    out_signature="",
     async_callbacks=("cb_success", "cb_error"),
 )
 def CreateSession(
     self,
     request_id,
+    session_handle,
     app_id,
     parent_window,
     use_case,
@@ -60,15 +62,18 @@ def CreateSession(
     cb_error,
 ):
     logger.debug(
-        f"CreateSession({request_id}, {app_id}, {parent_window}, {use_case}, {instructions})"
+        f"CreateSession({request_id}, {session_handle}, {app_id}, {parent_window}, {use_case}, {instructions})"
     )
     params = self.language_params
+    self.language_sessions[session_handle] = ImplSession(
+        self, BUS_NAME, session_handle, app_id
+    ).export(lambda: self.language_sessions.pop(session_handle, None))
     request = ImplRequest(
         self,
         BUS_NAME,
         request_id,
         logger,
-        lambda response, results: cb_success(params.session_id),
+        lambda response, results: cb_success(),
         cb_error,
     )
 
@@ -80,17 +85,12 @@ def CreateSession(
 
 @dbus.service.method(
     MAIN_IFACE,
-    in_signature="ss",
+    in_signature="oo",
     out_signature="",
     async_callbacks=("cb_success", "cb_error"),
 )
-def Prewarm(self, request_id, session_id, cb_success, cb_error):
+def Prewarm(self, request_id, session_handle, cb_success, cb_error):
     request = ImplRequest(
         self, BUS_NAME, request_id, logger, lambda response, results: cb_success(), cb_error
     )
     request.respond(Response(0, {}), delay=self.language_params.delay)
-
-
-@dbus.service.method(MAIN_IFACE, in_signature="s", out_signature="")
-def EndSession(self, session_id):
-    logger.debug(f"EndSession({session_id})")

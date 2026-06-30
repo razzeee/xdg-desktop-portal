@@ -49,7 +49,6 @@ typedef struct _SpeechSignalForward
   XdpDbusImplSpeech *impl;
   XdpRequest *request;
   char *request_handle;
-  char *backend_session_id;
   char *session_handle;
   gulong loading_handler_id;
   gulong handler_id;
@@ -66,28 +65,19 @@ typedef struct _SpeechCreateSession
 {
   Speech *speech;
   XdpRequest *request;
-  XdpAppInfo *app_info;
-  GDBusConnection *connection;
-  char *use_case;
-  GVariant *options;
+  XdpSession *session;
 } SpeechCreateSession;
 
 static SpeechCreateSession *
 speech_create_session_new (Speech         *speech,
-                           XdpRequest     *request,
-                           XdpAppInfo     *app_info,
-                           GDBusConnection *connection,
-                           const char     *use_case,
-                           GVariant       *options)
+                            XdpRequest     *request,
+                           XdpSession     *session)
 {
   SpeechCreateSession *create = g_new0 (SpeechCreateSession, 1);
 
   create->speech = g_object_ref (speech);
   create->request = g_object_ref (request);
-  create->app_info = g_object_ref (app_info);
-  create->connection = g_object_ref (connection);
-  create->use_case = g_strdup (use_case);
-  create->options = g_variant_ref (options);
+  create->session = g_object_ref (session);
 
   return create;
 }
@@ -97,10 +87,7 @@ speech_create_session_free (SpeechCreateSession *create)
 {
   g_clear_object (&create->speech);
   g_clear_object (&create->request);
-  g_clear_object (&create->app_info);
-  g_clear_object (&create->connection);
-  g_clear_pointer (&create->use_case, g_free);
-  g_clear_pointer (&create->options, g_variant_unref);
+  g_clear_object (&create->session);
   g_free (create);
 }
 
@@ -110,7 +97,6 @@ static SpeechSignalForward *
 speech_signal_forward_new (Speech            *speech,
                            XdpDbusImplSpeech *impl,
                            XdpRequest        *request,
-                           const char        *backend_session_id,
                            const char        *session_handle,
                            SpeechCallKind     call_kind)
 {
@@ -120,7 +106,6 @@ speech_signal_forward_new (Speech            *speech,
   forward->impl = g_object_ref (impl);
   forward->request = g_object_ref (request);
   forward->request_handle = g_strdup (xdp_request_get_object_path (request));
-  forward->backend_session_id = g_strdup (backend_session_id);
   forward->session_handle = g_strdup (session_handle);
   forward->call_kind = call_kind;
 
@@ -134,7 +119,6 @@ speech_signal_forward_unref (SpeechSignalForward *forward)
   g_clear_object (&forward->impl);
   g_clear_object (&forward->request);
   g_clear_pointer (&forward->request_handle, g_free);
-  g_clear_pointer (&forward->backend_session_id, g_free);
   g_clear_pointer (&forward->session_handle, g_free);
   g_free (forward);
 }
@@ -187,7 +171,7 @@ forward_model_loading (XdpDbusImplSpeech *impl,
   SpeechSignalForward *forward = user_data;
 
   if (g_strcmp0 (request_id, forward->request_handle) != 0 ||
-      g_strcmp0 (session_id, forward->backend_session_id) != 0)
+      g_strcmp0 (session_id, forward->session_handle) != 0)
     return;
 
   speech_emit_signal_to_request (forward,
@@ -253,7 +237,7 @@ forward_transcription_received (XdpDbusImplSpeech *impl,
   SpeechSignalForward *forward = user_data;
 
   if (g_strcmp0 (request_id, forward->request_handle) != 0 ||
-      g_strcmp0 (session_id, forward->backend_session_id) != 0)
+      g_strcmp0 (session_id, forward->session_handle) != 0)
     return;
 
   speech_emit_signal_to_request (forward,
@@ -301,59 +285,35 @@ speech_create_session_done (GObject      *source,
 {
   XdpDbusImplSpeech *impl = XDP_DBUS_IMPL_SPEECH (source);
   g_autoptr(SpeechCreateSession) create = user_data;
-  g_autofree char *backend_session_id = NULL;
-  XdpSession *session = NULL;
   g_autoptr(GError) error = NULL;
 
-  if (!xdp_dbus_impl_speech_call_create_session_finish (impl,
-                                                        &backend_session_id,
-                                                        result,
-                                                        &error))
+  if (!xdp_dbus_impl_speech_call_create_session_finish (impl, result, &error))
     {
       model_request_emit_response (create->request,
                                    model_response_from_error (error),
                                    error->message);
+      xdp_session_close (create->session, FALSE);
       return;
     }
 
   if (!model_request_is_exported (create->request))
     {
-      end_backend_session (G_OBJECT (create->speech->impl),
-                           MODEL_SESSION_SPEECH,
-                           backend_session_id);
-      return;
-    }
-
-  session = XDP_SESSION (model_session_new (create->speech->context,
-                                            create->connection,
-                                            create->app_info,
-                                            G_OBJECT (create->speech->impl),
-                                            MODEL_SESSION_SPEECH,
-                                            create->use_case,
-                                            create->options,
-                                            backend_session_id,
-                                            &error));
-  if (session == NULL)
-    {
-      end_backend_session (G_OBJECT (create->speech->impl),
-                           MODEL_SESSION_SPEECH,
-                           backend_session_id);
-      model_request_emit_response (create->request, 2, error->message);
+      xdp_session_close (create->session, FALSE);
       return;
     }
 
   {
-    SESSION_AUTOLOCK (session);
+    SESSION_AUTOLOCK (create->session);
 
-    if (!xdp_session_export (session, &error))
+    if (!xdp_session_export (create->session, &error))
       {
-        xdp_session_close (session, FALSE);
+        xdp_session_close (create->session, FALSE);
         model_request_emit_response (create->request, 2, error->message);
         return;
       }
 
-    if (!model_request_register_session_and_emit_response (create->request, session))
-      xdp_session_close (session, FALSE);
+    if (!model_request_register_session_and_emit_response (create->request, create->session))
+      xdp_session_close (create->session, FALSE);
   }
 }
 
@@ -369,6 +329,7 @@ handle_speech_create_session (XdpDbusSpeech       *object,
   XdpAppInfo *app_info = xdp_invocation_get_app_info (invocation);
   GDBusConnection *connection = g_dbus_method_invocation_get_connection (invocation);
   XdpRequest *request = xdp_request_from_invocation (invocation);
+  XdpSession *session;
   SpeechCreateSession *create;
   g_autoptr(GError) error = NULL;
 
@@ -389,14 +350,27 @@ handle_speech_create_session (XdpDbusSpeech       *object,
       return G_DBUS_METHOD_INVOCATION_HANDLED;
     }
 
+  session = XDP_SESSION (model_session_new (speech->context,
+                                            connection,
+                                            app_info,
+                                            G_OBJECT (speech->impl),
+                                            MODEL_SESSION_SPEECH,
+                                            arg_use_case,
+                                            arg_options,
+                                            &error));
+  if (session == NULL)
+    {
+      xdp_request_unexport (request);
+      g_dbus_method_invocation_return_gerror (invocation, error);
+      return G_DBUS_METHOD_INVOCATION_HANDLED;
+    }
+
   create = speech_create_session_new (speech,
                                        request,
-                                       app_info,
-                                       connection,
-                                       arg_use_case,
-                                       arg_options);
+                                       session);
   xdp_dbus_impl_speech_call_create_session (speech->impl,
                                              xdp_request_get_object_path (request),
+                                             session->id,
                                              model_app_id_from_invocation (invocation, app_info),
                                              arg_parent_window,
                                              arg_use_case,
@@ -448,16 +422,15 @@ handle_speech_prewarm (XdpDbusSpeech       *object,
     }
 
   forward = speech_signal_forward_new (speech,
-                                        speech->impl,
-                                        request,
-                                        model_session_get_backend_session_id (model_session),
-                                        session->id,
-                                        SPEECH_CALL_PREWARM);
+                                         speech->impl,
+                                         request,
+                                         session->id,
+                                         SPEECH_CALL_PREWARM);
   speech_signal_forward_connect_loading (forward);
 
   xdp_dbus_impl_speech_call_prewarm (speech->impl,
                                      xdp_request_get_object_path (request),
-                                     model_session_get_backend_session_id (model_session),
+                                     session->id,
                                       NULL,
                                      finish_speech_call,
                                      forward);
@@ -508,11 +481,10 @@ handle_speech_stream_transcribe (XdpDbusSpeech       *object,
     }
 
   forward = speech_signal_forward_new (speech,
-                                        speech->impl,
-                                        request,
-                                        model_session_get_backend_session_id (model_session),
-                                        session->id,
-                                        SPEECH_CALL_STREAM_TRANSCRIBE);
+                                         speech->impl,
+                                         request,
+                                         session->id,
+                                         SPEECH_CALL_STREAM_TRANSCRIBE);
   speech_signal_forward_connect_loading (forward);
   forward->handler_id = g_signal_connect (speech->impl,
                                           "transcription-received",
@@ -521,7 +493,7 @@ handle_speech_stream_transcribe (XdpDbusSpeech       *object,
 
   xdp_dbus_impl_speech_call_stream_transcribe (speech->impl,
                                                xdp_request_get_object_path (request),
-                                               model_session_get_backend_session_id (model_session),
+                                               session->id,
                                                arg_audio,
                                                arg_source_language_hint,
                                                 NULL,
