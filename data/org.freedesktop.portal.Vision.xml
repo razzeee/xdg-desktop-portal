@@ -81,6 +81,7 @@
         StreamDescribe:
         @session_handle: A ``vision.describe`` session handle returned by CreateSession
         @image_fd: Readable file descriptor containing PNG or JPEG image bytes.
+        @instructions: Optional per-image instructions for this request.
         @options: Reserved vardict with optional ``handle_token`` string
         The method returns a Request handle immediately. Natural-language image
         description tokens are emitted as VisionTextReceived signals;
@@ -91,7 +92,8 @@
       <annotation name="org.gtk.GDBus.C.UnixFD" value="true"/>
       <arg type="o" name="session_handle" direction="in"/>
       <arg type="h" name="image_fd" direction="in"/>
-      <annotation name="org.qtproject.QtDBus.QtTypeName.In2" value="QVariantMap"/>
+      <arg type="s" name="instructions" direction="in"/>
+      <annotation name="org.qtproject.QtDBus.QtTypeName.In3" value="QVariantMap"/>
       <arg type="a{sv}" name="options" direction="in"/>
       <arg type="o" name="handle" direction="out"/>
     </method>
@@ -100,6 +102,7 @@
         StreamOcr:
         @session_handle: A ``vision.ocr`` session handle returned by CreateSession
         @image_fd: Readable file descriptor containing PNG or JPEG image bytes.
+        @instructions: Optional per-image instructions for this request.
         @options: Reserved vardict with optional ``handle_token`` string
         The method returns a Request handle immediately. Text extracted from the
         image is emitted as VisionTextReceived signals; completion,
@@ -110,7 +113,8 @@
       <annotation name="org.gtk.GDBus.C.UnixFD" value="true"/>
       <arg type="o" name="session_handle" direction="in"/>
       <arg type="h" name="image_fd" direction="in"/>
-      <annotation name="org.qtproject.QtDBus.QtTypeName.In2" value="QVariantMap"/>
+      <arg type="s" name="instructions" direction="in"/>
+      <annotation name="org.qtproject.QtDBus.QtTypeName.In3" value="QVariantMap"/>
       <arg type="a{sv}" name="options" direction="in"/>
       <arg type="o" name="handle" direction="out"/>
     </method>
@@ -119,6 +123,7 @@
         StreamSegment:
         @session_handle: A ``vision.segment`` session handle returned by CreateSession
         @image_fd: Readable file descriptor containing PNG or JPEG image bytes.
+        @instructions: Optional per-image instructions for this request.
         @options: Reserved vardict with optional ``handle_token`` string
         The method returns a Request handle immediately. Detected objects are
         emitted as VisionSegmentsReceived signals; completion, cancellation, and
@@ -131,7 +136,8 @@
       <annotation name="org.gtk.GDBus.C.UnixFD" value="true"/>
       <arg type="o" name="session_handle" direction="in"/>
       <arg type="h" name="image_fd" direction="in"/>
-      <annotation name="org.qtproject.QtDBus.QtTypeName.In2" value="QVariantMap"/>
+      <arg type="s" name="instructions" direction="in"/>
+      <annotation name="org.qtproject.QtDBus.QtTypeName.In3" value="QVariantMap"/>
       <arg type="a{sv}" name="options" direction="in"/>
       <arg type="o" name="handle" direction="out"/>
     </method>

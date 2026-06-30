@@ -41,6 +41,7 @@
     <!--
         StreamDescribe:
         @image_fd: Readable file descriptor containing PNG or JPEG image bytes.
+        @instructions: Optional per-image instructions for this request.
         Natural-language image description tokens are emitted as
         VisionTextReceived signals while this call is in progress.
     -->
@@ -49,11 +50,13 @@
       <arg type="o" name="handle" direction="in"/>
       <arg type="o" name="session_handle" direction="in"/>
       <arg type="h" name="image_fd" direction="in"/>
+      <arg type="s" name="instructions" direction="in"/>
     </method>
 
     <!--
         StreamOcr:
         @image_fd: Readable file descriptor containing PNG or JPEG image bytes.
+        @instructions: Optional per-image instructions for this request.
         Text extracted from the image is emitted as VisionTextReceived signals
         while this call is in progress.
     -->
@@ -62,11 +65,13 @@
       <arg type="o" name="handle" direction="in"/>
       <arg type="o" name="session_handle" direction="in"/>
       <arg type="h" name="image_fd" direction="in"/>
+      <arg type="s" name="instructions" direction="in"/>
     </method>
 
     <!--
         StreamSegment:
         @image_fd: Readable file descriptor containing PNG or JPEG image bytes.
+        @instructions: Optional per-image instructions for this request.
         Detected objects are emitted as VisionSegmentsReceived signals.
 
         Segment coordinates are normalized rectangles in the ``0.0..1.0``
@@ -77,6 +82,7 @@
       <arg type="o" name="handle" direction="in"/>
       <arg type="o" name="session_handle" direction="in"/>
       <arg type="h" name="image_fd" direction="in"/>
+      <arg type="s" name="instructions" direction="in"/>
     </method>
 
     <signal name="ModelLoading">

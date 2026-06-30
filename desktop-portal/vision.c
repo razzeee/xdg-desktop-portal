@@ -491,6 +491,7 @@ handle_vision_stream_describe (XdpDbusVision       *object,
                                GUnixFDList          *fd_list,
                                const char            *arg_session_handle,
                                GVariant              *arg_image_fd,
+                               const char            *arg_instructions,
                                GVariant              *arg_options)
 {
   Vision *vision = (Vision *) object;
@@ -546,6 +547,7 @@ handle_vision_stream_describe (XdpDbusVision       *object,
                                              xdp_request_get_object_path (request),
                                              session->id,
                                              arg_image_fd,
+                                             arg_instructions,
                                              fd_list,
                                              NULL,
                                              finish_vision_call,
@@ -563,6 +565,7 @@ handle_vision_stream_ocr (XdpDbusVision       *object,
                           GUnixFDList          *fd_list,
                           const char            *arg_session_handle,
                           GVariant              *arg_image_fd,
+                          const char            *arg_instructions,
                           GVariant              *arg_options)
 {
   Vision *vision = (Vision *) object;
@@ -618,6 +621,7 @@ handle_vision_stream_ocr (XdpDbusVision       *object,
                                         xdp_request_get_object_path (request),
                                         session->id,
                                         arg_image_fd,
+                                        arg_instructions,
                                         fd_list,
                                         NULL,
                                         finish_vision_call,
@@ -635,6 +639,7 @@ handle_vision_stream_segment (XdpDbusVision       *object,
                               GUnixFDList          *fd_list,
                               const char            *arg_session_handle,
                               GVariant              *arg_image_fd,
+                              const char            *arg_instructions,
                               GVariant              *arg_options)
 {
   Vision *vision = (Vision *) object;
@@ -690,6 +695,7 @@ handle_vision_stream_segment (XdpDbusVision       *object,
                                             xdp_request_get_object_path (request),
                                             session->id,
                                             arg_image_fd,
+                                            arg_instructions,
                                             fd_list,
                                             NULL,
                                             finish_vision_call,
