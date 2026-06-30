@@ -40,7 +40,10 @@
 
     <!--
         StreamDescribe:
-        @image: Base64-encoded PNG or JPEG image bytes
+        @image: Prototype base64-encoded PNG or JPEG image bytes. The encoded
+          payload must fit within the session bus message limit. This string
+          transport is only for small, user-initiated media requests; a future
+          fd/document-handle transport requires a separate API revision.
         Natural-language image description tokens are emitted as
         VisionTextReceived signals while this call is in progress.
     -->
@@ -52,7 +55,10 @@
 
     <!--
         StreamOcr:
-        @image: Base64-encoded PNG or JPEG image bytes
+        @image: Prototype base64-encoded PNG or JPEG image bytes. The encoded
+          payload must fit within the session bus message limit. This string
+          transport is only for small, user-initiated media requests; a future
+          fd/document-handle transport requires a separate API revision.
         Text extracted from the image is emitted as VisionTextReceived signals
         while this call is in progress.
     -->
@@ -64,7 +70,10 @@
 
     <!--
         StreamSegment:
-        @image: Base64-encoded PNG or JPEG image bytes
+        @image: Prototype base64-encoded PNG or JPEG image bytes. The encoded
+          payload must fit within the session bus message limit. This string
+          transport is only for small, user-initiated media requests; a future
+          fd/document-handle transport requires a separate API revision.
         Detected objects are emitted as VisionSegmentsReceived signals.
 
         Segment coordinates are normalized rectangles in the ``0.0..1.0``

@@ -80,10 +80,12 @@
     <!--
         StreamTranscribe:
 
-        Starts streaming transcription or translation segments. The @audio
-        argument is base64-encoded 16 kHz mono f32le PCM and must fit within
-        the session bus message limit. @source_language_hint is the optional
-        spoken input language hint.
+        Starts streaming transcription or translation segments. In this
+        prototype, the @audio argument is base64-encoded 16 kHz mono f32le PCM
+        and must fit within the session bus message limit after encoding. This
+        string transport is only for small, user-initiated media requests; a
+        future fd/document-handle transport requires a separate API revision.
+        @source_language_hint is the optional spoken input language hint.
         @options: Reserved vardict with optional ``handle_token`` string
         The method returns a Request handle immediately. Segments are emitted as
         TranscriptionReceived signals; completion, cancellation, and failures

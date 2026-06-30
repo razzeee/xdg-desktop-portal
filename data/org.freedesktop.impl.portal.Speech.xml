@@ -41,8 +41,12 @@
     <!--
         StreamTranscribe:
 
-        Streams transcription or translation segments. The @audio and
-        @source_language_hint is the optional spoken input language hint.
+        Streams transcription or translation segments. In this prototype,
+        @audio is base64-encoded 16 kHz mono f32le PCM and must fit within the
+        session bus message limit after encoding. This string transport is only
+        for small, user-initiated media requests; a future fd/document-handle
+        transport requires a separate API revision. @source_language_hint is the
+        optional spoken input language hint.
         Payloads are emitted as TranscriptionReceived signals while this call
         is in progress.
     -->
