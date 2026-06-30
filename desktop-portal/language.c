@@ -388,6 +388,13 @@ handle_language_get_use_case_availability (XdpDbusLanguage      *object,
   g_autoptr(GVariant) availability = NULL;
   g_autoptr(GError) error = NULL;
 
+  if (!model_use_case_is_supported (MODEL_SESSION_LANGUAGE, arg_use_case))
+    {
+      availability = model_unsupported_use_case_availability (arg_use_case);
+      xdp_dbus_language_complete_get_use_case_availability (object, invocation, availability);
+      return G_DBUS_METHOD_INVOCATION_HANDLED;
+    }
+
   if (!xdp_dbus_impl_language_call_get_use_case_availability_sync (language->impl,
                                                                     model_app_id_from_invocation (invocation, app_info),
                                                                     arg_use_case,
@@ -459,6 +466,9 @@ handle_language_create_session (XdpDbusLanguage      *object,
   g_autoptr(GError) error = NULL;
 
   REQUEST_AUTOLOCK (request);
+
+  if (!model_validate_use_case_for_session (invocation, MODEL_SESSION_LANGUAGE, arg_use_case))
+    return G_DBUS_METHOD_INVOCATION_HANDLED;
 
   if (!model_session_options_validate (arg_options, &error))
     {

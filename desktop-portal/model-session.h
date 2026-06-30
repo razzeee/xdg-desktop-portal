@@ -35,10 +35,23 @@ XdpSession *lookup_model_session (GDBusMethodInvocation *invocation,
                                   ModelSessionKind       kind);
 
 const char *model_app_id_from_invocation (GDBusMethodInvocation *invocation,
-                                          XdpAppInfo            *app_info);
+                                           XdpAppInfo            *app_info);
+
+gboolean model_use_case_is_supported (ModelSessionKind  kind,
+                                      const char       *use_case);
+
+GVariant *model_unsupported_use_case_availability (const char *use_case);
+
+gboolean model_validate_use_case_for_session (GDBusMethodInvocation *invocation,
+                                              ModelSessionKind       kind,
+                                              const char            *use_case);
 
 gboolean model_session_ensure_language_generation_use_case (GDBusMethodInvocation *invocation,
-                                                            ModelSession          *session);
+                                                             ModelSession          *session);
+
+gboolean model_session_ensure_speech_use_case (GDBusMethodInvocation *invocation,
+                                               ModelSession          *session,
+                                               const char            *method);
 
 gboolean model_session_ensure_exact_use_case (GDBusMethodInvocation *invocation,
                                               ModelSession          *session,

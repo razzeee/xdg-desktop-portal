@@ -150,7 +150,7 @@ lookup_model_session (GDBusMethodInvocation *invocation,
 
 const char *
 model_app_id_from_invocation (GDBusMethodInvocation *invocation,
-                              XdpAppInfo            *app_info)
+                               XdpAppInfo            *app_info)
 {
   const char *app_id = xdp_app_info_get_id (app_info);
 
@@ -161,8 +161,62 @@ model_app_id_from_invocation (GDBusMethodInvocation *invocation,
 }
 
 gboolean
+model_use_case_is_supported (ModelSessionKind  kind,
+                             const char       *use_case)
+{
+  switch (kind)
+    {
+    case MODEL_SESSION_LANGUAGE:
+      return g_strcmp0 (use_case, "language.summarize") == 0 ||
+             g_strcmp0 (use_case, "language.translate") == 0 ||
+             g_strcmp0 (use_case, "language.rephrase") == 0 ||
+             g_strcmp0 (use_case, "language.complete") == 0 ||
+             g_strcmp0 (use_case, "language.classify") == 0 ||
+             g_strcmp0 (use_case, "language.extract") == 0 ||
+             g_strcmp0 (use_case, "language.analyze") == 0 ||
+             g_strcmp0 (use_case, "language.embed") == 0;
+    case MODEL_SESSION_SPEECH:
+      return g_strcmp0 (use_case, "speech.transcribe") == 0 ||
+             g_strcmp0 (use_case, "speech.translate") == 0;
+    case MODEL_SESSION_VISION:
+      return g_strcmp0 (use_case, "vision.describe") == 0 ||
+             g_strcmp0 (use_case, "vision.ocr") == 0 ||
+             g_strcmp0 (use_case, "vision.segment") == 0;
+    }
+
+  g_assert_not_reached ();
+}
+
+GVariant *
+model_unsupported_use_case_availability (const char *use_case)
+{
+  g_autofree char *reason = g_strdup_printf ("unsupported use-case: %s", use_case);
+
+  return g_variant_new ("(bss)",
+                        FALSE,
+                        "unsupported_use_case",
+                        reason);
+}
+
+gboolean
+model_validate_use_case_for_session (GDBusMethodInvocation *invocation,
+                                     ModelSessionKind       kind,
+                                     const char            *use_case)
+{
+  if (model_use_case_is_supported (kind, use_case))
+    return TRUE;
+
+  g_dbus_method_invocation_return_error (invocation,
+                                         XDG_DESKTOP_PORTAL_ERROR,
+                                         XDG_DESKTOP_PORTAL_ERROR_INVALID_ARGUMENT,
+                                         "aileron.Inference.InvalidInput: unsupported use-case: %s",
+                                         use_case);
+  return FALSE;
+}
+
+gboolean
 model_session_ensure_language_generation_use_case (GDBusMethodInvocation *invocation,
-                                                   ModelSession          *session)
+                                                    ModelSession          *session)
 {
   const char *use_case = session->use_case;
 
@@ -178,6 +232,26 @@ model_session_ensure_language_generation_use_case (GDBusMethodInvocation *invoca
                                          XDG_DESKTOP_PORTAL_ERROR,
                                          XDG_DESKTOP_PORTAL_ERROR_INVALID_ARGUMENT,
                                          "aileron.Inference.InvalidInput: full text generation requires a language generation use-case, got %s",
+                                         use_case);
+  return FALSE;
+}
+
+gboolean
+model_session_ensure_speech_use_case (GDBusMethodInvocation *invocation,
+                                      ModelSession          *session,
+                                      const char            *method)
+{
+  const char *use_case = session->use_case;
+
+  if (g_strcmp0 (use_case, "speech.transcribe") == 0 ||
+      g_strcmp0 (use_case, "speech.translate") == 0)
+    return TRUE;
+
+  g_dbus_method_invocation_return_error (invocation,
+                                         XDG_DESKTOP_PORTAL_ERROR,
+                                         XDG_DESKTOP_PORTAL_ERROR_INVALID_ARGUMENT,
+                                         "aileron.Inference.InvalidInput: %s requires use-case speech.transcribe or speech.translate, got %s",
+                                         method,
                                          use_case);
   return FALSE;
 }

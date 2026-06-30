@@ -55,6 +55,45 @@ class TestModelPortals:
         assert args[4] == use_case
         assert args[5] == instructions
 
+    @pytest.mark.parametrize(
+        "portal,use_case",
+        [
+            ("Language", "speech.transcribe"),
+            ("Speech", "vision.describe"),
+            ("Vision", "language.summarize"),
+            ("Language", "language.unknown"),
+        ],
+    )
+    def test_get_use_case_availability_rejects_unsupported_tokens(
+        self, portals, dbus_con, portal, use_case
+    ):
+        portal_intf = xdp.get_portal_iface(dbus_con, portal)
+
+        is_available, code, reason = portal_intf.GetUseCaseAvailability(use_case, {})
+
+        assert not is_available
+        assert code == "unsupported_use_case"
+        assert use_case in reason
+
+    @pytest.mark.parametrize(
+        "portal,use_case",
+        [
+            ("Language", "speech.transcribe"),
+            ("Speech", "vision.describe"),
+            ("Vision", "language.summarize"),
+            ("Language", "language.unknown"),
+        ],
+    )
+    def test_create_session_rejects_unsupported_tokens(
+        self, portals, dbus_con, portal, use_case
+    ):
+        portal_intf = xdp.get_portal_iface(dbus_con, portal)
+
+        with pytest.raises(Exception) as excinfo:
+            portal_intf.CreateSession("", use_case, "", {})
+
+        assert "unsupported use-case" in str(excinfo.value)
+
     @pytest.mark.parametrize("template_params", ({"language": {"expect-close": True}},))
     def test_create_session_close_propagates_to_impl_request_and_session(
         self, portals, dbus_con

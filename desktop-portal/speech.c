@@ -263,8 +263,15 @@ handle_speech_get_use_case_availability (XdpDbusSpeech       *object,
   g_autoptr(GVariant) availability = NULL;
   g_autoptr(GError) error = NULL;
 
+  if (!model_use_case_is_supported (MODEL_SESSION_SPEECH, arg_use_case))
+    {
+      availability = model_unsupported_use_case_availability (arg_use_case);
+      xdp_dbus_speech_complete_get_use_case_availability (object, invocation, availability);
+      return G_DBUS_METHOD_INVOCATION_HANDLED;
+    }
+
   if (!xdp_dbus_impl_speech_call_get_use_case_availability_sync (speech->impl,
-                                                                 model_app_id_from_invocation (invocation, app_info),
+                                                                  model_app_id_from_invocation (invocation, app_info),
                                                                  arg_use_case,
                                                                  &availability,
                                                                  NULL,
@@ -334,6 +341,9 @@ handle_speech_create_session (XdpDbusSpeech       *object,
   g_autoptr(GError) error = NULL;
 
   REQUEST_AUTOLOCK (request);
+
+  if (!model_validate_use_case_for_session (invocation, MODEL_SESSION_SPEECH, arg_use_case))
+    return G_DBUS_METHOD_INVOCATION_HANDLED;
 
   if (!model_session_options_validate (arg_options, &error))
     {
@@ -457,6 +467,11 @@ handle_speech_stream_transcribe (XdpDbusSpeech       *object,
 
   session = lookup_model_session (invocation, arg_session_handle, MODEL_SESSION_SPEECH);
   if (session == NULL)
+    return G_DBUS_METHOD_INVOCATION_HANDLED;
+
+  if (!model_session_ensure_speech_use_case (invocation,
+                                             MODEL_SESSION (session),
+                                             "StreamTranscribe"))
     return G_DBUS_METHOD_INVOCATION_HANDLED;
 
   if (!model_request_options_validate (arg_options, &error))
