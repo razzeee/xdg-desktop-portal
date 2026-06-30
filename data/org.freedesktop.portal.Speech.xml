@@ -81,10 +81,7 @@
         StreamTranscribe:
 
         Starts streaming transcription or translation segments. In this
-        prototype, the @audio argument is base64-encoded 16 kHz mono f32le PCM
-        and must fit within the session bus message limit after encoding. This
-        string transport is only for small, user-initiated media requests; a
-        future fd/document-handle transport requires a separate API revision.
+        @audio_fd is a readable file descriptor containing 16 kHz mono f32le PCM.
         @source_language_hint is the optional spoken input language hint.
         @options: Reserved vardict with optional ``handle_token`` string
         The method returns a Request handle immediately. Segments are emitted as
@@ -92,8 +89,9 @@
         are reported through the Request::Response signal.
     -->
     <method name="StreamTranscribe">
+      <annotation name="org.gtk.GDBus.C.UnixFD" value="true"/>
       <arg type="o" name="session_handle" direction="in"/>
-      <arg type="s" name="audio" direction="in"/>
+      <arg type="h" name="audio_fd" direction="in"/>
       <arg type="s" name="source_language_hint" direction="in"/>
       <annotation name="org.qtproject.QtDBus.QtTypeName.In3" value="QVariantMap"/>
       <arg type="a{sv}" name="options" direction="in"/>

@@ -7,6 +7,7 @@
 #include "vision.h"
 
 #include <gio/gio.h>
+#include <gio/gunixfdlist.h>
 
 #include "model-session.h"
 #include "xdp-app-info.h"
@@ -209,13 +210,13 @@ finish_vision_call (GObject      *source,
       ok = xdp_dbus_impl_vision_call_prewarm_finish (impl, result, &error);
       break;
     case VISION_CALL_STREAM_DESCRIBE:
-      ok = xdp_dbus_impl_vision_call_stream_describe_finish (impl, result, &error);
+      ok = xdp_dbus_impl_vision_call_stream_describe_finish (impl, NULL, result, &error);
       break;
     case VISION_CALL_STREAM_OCR:
-      ok = xdp_dbus_impl_vision_call_stream_ocr_finish (impl, result, &error);
+      ok = xdp_dbus_impl_vision_call_stream_ocr_finish (impl, NULL, result, &error);
       break;
     case VISION_CALL_STREAM_SEGMENT:
-      ok = xdp_dbus_impl_vision_call_stream_segment_finish (impl, result, &error);
+      ok = xdp_dbus_impl_vision_call_stream_segment_finish (impl, NULL, result, &error);
       break;
     }
 
@@ -487,8 +488,9 @@ handle_vision_prewarm (XdpDbusVision       *object,
 static gboolean
 handle_vision_stream_describe (XdpDbusVision       *object,
                                GDBusMethodInvocation *invocation,
+                               GUnixFDList          *fd_list,
                                const char            *arg_session_handle,
-                               const char            *arg_image,
+                               GVariant              *arg_image_fd,
                                GVariant              *arg_options)
 {
   Vision *vision = (Vision *) object;
@@ -543,21 +545,24 @@ handle_vision_stream_describe (XdpDbusVision       *object,
   xdp_dbus_impl_vision_call_stream_describe (vision->impl,
                                              xdp_request_get_object_path (request),
                                              session->id,
-                                             arg_image,
+                                             arg_image_fd,
+                                             fd_list,
                                              NULL,
                                              finish_vision_call,
                                              forward);
   xdp_dbus_vision_complete_stream_describe (object,
-                                           invocation,
-                                           xdp_request_get_object_path (request));
+                                            invocation,
+                                            NULL,
+                                            xdp_request_get_object_path (request));
   return G_DBUS_METHOD_INVOCATION_HANDLED;
 }
 
 static gboolean
 handle_vision_stream_ocr (XdpDbusVision       *object,
                           GDBusMethodInvocation *invocation,
+                          GUnixFDList          *fd_list,
                           const char            *arg_session_handle,
-                          const char            *arg_image,
+                          GVariant              *arg_image_fd,
                           GVariant              *arg_options)
 {
   Vision *vision = (Vision *) object;
@@ -612,21 +617,24 @@ handle_vision_stream_ocr (XdpDbusVision       *object,
   xdp_dbus_impl_vision_call_stream_ocr (vision->impl,
                                         xdp_request_get_object_path (request),
                                         session->id,
-                                        arg_image,
+                                        arg_image_fd,
+                                        fd_list,
                                         NULL,
                                         finish_vision_call,
                                         forward);
   xdp_dbus_vision_complete_stream_ocr (object,
-                                      invocation,
-                                      xdp_request_get_object_path (request));
+                                       invocation,
+                                       NULL,
+                                       xdp_request_get_object_path (request));
   return G_DBUS_METHOD_INVOCATION_HANDLED;
 }
 
 static gboolean
 handle_vision_stream_segment (XdpDbusVision       *object,
                               GDBusMethodInvocation *invocation,
+                              GUnixFDList          *fd_list,
                               const char            *arg_session_handle,
-                              const char            *arg_image,
+                              GVariant              *arg_image_fd,
                               GVariant              *arg_options)
 {
   Vision *vision = (Vision *) object;
@@ -681,13 +689,15 @@ handle_vision_stream_segment (XdpDbusVision       *object,
   xdp_dbus_impl_vision_call_stream_segment (vision->impl,
                                             xdp_request_get_object_path (request),
                                             session->id,
-                                            arg_image,
+                                            arg_image_fd,
+                                            fd_list,
                                             NULL,
                                             finish_vision_call,
                                             forward);
   xdp_dbus_vision_complete_stream_segment (object,
-                                          invocation,
-                                          xdp_request_get_object_path (request));
+                                           invocation,
+                                           NULL,
+                                           xdp_request_get_object_path (request));
   return G_DBUS_METHOD_INVOCATION_HANDLED;
 }
 

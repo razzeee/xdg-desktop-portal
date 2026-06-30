@@ -7,6 +7,7 @@
 #include "speech.h"
 
 #include <gio/gio.h>
+#include <gio/gunixfdlist.h>
 
 #include "model-session.h"
 #include "xdp-app-info.h"
@@ -207,7 +208,7 @@ finish_speech_call (GObject      *source,
       ok = xdp_dbus_impl_speech_call_prewarm_finish (impl, result, &error);
       break;
     case SPEECH_CALL_STREAM_TRANSCRIBE:
-      ok = xdp_dbus_impl_speech_call_stream_transcribe_finish (impl, result, &error);
+      ok = xdp_dbus_impl_speech_call_stream_transcribe_finish (impl, NULL, result, &error);
       break;
     }
 
@@ -453,8 +454,9 @@ handle_speech_prewarm (XdpDbusSpeech       *object,
 static gboolean
 handle_speech_stream_transcribe (XdpDbusSpeech       *object,
                                  GDBusMethodInvocation *invocation,
+                                 GUnixFDList          *fd_list,
                                  const char            *arg_session_handle,
-                                 const char            *arg_audio,
+                                 GVariant              *arg_audio_fd,
                                  const char            *arg_source_language_hint,
                                  GVariant              *arg_options)
 {
@@ -509,14 +511,16 @@ handle_speech_stream_transcribe (XdpDbusSpeech       *object,
   xdp_dbus_impl_speech_call_stream_transcribe (speech->impl,
                                                xdp_request_get_object_path (request),
                                                session->id,
-                                               arg_audio,
+                                               arg_audio_fd,
                                                arg_source_language_hint,
-                                                NULL,
+                                               fd_list,
+                                               NULL,
                                                finish_speech_call,
                                                forward);
   xdp_dbus_speech_complete_stream_transcribe (object,
-                                             invocation,
-                                             xdp_request_get_object_path (request));
+                                              invocation,
+                                              NULL,
+                                              xdp_request_get_object_path (request));
   return G_DBUS_METHOD_INVOCATION_HANDLED;
 }
 
