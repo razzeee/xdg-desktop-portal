@@ -51,6 +51,7 @@ typedef struct _VisionSignalForward
   XdpRequest *request;
   char *request_handle;
   char *session_handle;
+  XdpSealedFd *sealed_media;
   gulong loading_handler_id;
   gulong handler_id;
   guint call_kind;
@@ -121,6 +122,7 @@ vision_signal_forward_unref (VisionSignalForward *forward)
   g_clear_object (&forward->vision);
   g_clear_object (&forward->impl);
   g_clear_object (&forward->request);
+  g_clear_object (&forward->sealed_media);
   g_clear_pointer (&forward->request_handle, g_free);
   g_clear_pointer (&forward->session_handle, g_free);
   g_free (forward);
@@ -503,6 +505,9 @@ handle_vision_stream_describe (XdpDbusVision       *object,
   ModelSession *model_session;
   XdpRequest *request = xdp_request_from_invocation (invocation);
   VisionSignalForward *forward;
+  g_autoptr(XdpSealedFd) sealed_image = NULL;
+  g_autoptr(GUnixFDList) sealed_fd_list = NULL;
+  g_autoptr(GVariant) sealed_image_fd = NULL;
   g_autoptr(GError) error = NULL;
 
   session = lookup_model_session (invocation, arg_session_handle, MODEL_SESSION_VISION);
@@ -516,6 +521,24 @@ handle_vision_stream_describe (XdpDbusVision       *object,
     return G_DBUS_METHOD_INVOCATION_HANDLED;
 
   if (!model_request_options_validate (arg_options, &error))
+    {
+      g_dbus_method_invocation_return_gerror (invocation, error);
+      return G_DBUS_METHOD_INVOCATION_HANDLED;
+    }
+
+  sealed_image = xdp_sealed_fd_new_from_handle (arg_image_fd, fd_list, &error);
+  if (sealed_image == NULL)
+    {
+      g_dbus_method_invocation_return_error (invocation,
+                                             XDG_DESKTOP_PORTAL_ERROR,
+                                             XDG_DESKTOP_PORTAL_ERROR_INVALID_ARGUMENT,
+                                             "Invalid file descriptor: The file descriptor needs to be sealable");
+      return G_DBUS_METHOD_INVOCATION_HANDLED;
+    }
+
+  sealed_fd_list = g_unix_fd_list_new ();
+  sealed_image_fd = model_sealed_fd_to_handle (sealed_image, sealed_fd_list, &error);
+  if (sealed_image_fd == NULL)
     {
       g_dbus_method_invocation_return_gerror (invocation, error);
       return G_DBUS_METHOD_INVOCATION_HANDLED;
@@ -537,10 +560,11 @@ handle_vision_stream_describe (XdpDbusVision       *object,
     }
 
   forward = vision_signal_forward_new (vision,
-                                         vision->impl,
-                                         request,
-                                         session->id,
-                                         VISION_CALL_STREAM_DESCRIBE);
+                                      vision->impl,
+                                      request,
+                                      session->id,
+                                      VISION_CALL_STREAM_DESCRIBE);
+  forward->sealed_media = g_object_ref (sealed_image);
   vision_signal_forward_connect_loading (forward);
   forward->handler_id = g_signal_connect (vision->impl,
                                           "vision-text-received",
@@ -550,9 +574,9 @@ handle_vision_stream_describe (XdpDbusVision       *object,
   xdp_dbus_impl_vision_call_stream_describe (vision->impl,
                                              xdp_request_get_object_path (request),
                                              session->id,
-                                             arg_image_fd,
+                                             sealed_image_fd,
                                              arg_instructions,
-                                             fd_list,
+                                             sealed_fd_list,
                                              NULL,
                                              finish_vision_call,
                                              forward);
@@ -577,6 +601,9 @@ handle_vision_stream_ocr (XdpDbusVision       *object,
   ModelSession *model_session;
   XdpRequest *request = xdp_request_from_invocation (invocation);
   VisionSignalForward *forward;
+  g_autoptr(XdpSealedFd) sealed_image = NULL;
+  g_autoptr(GUnixFDList) sealed_fd_list = NULL;
+  g_autoptr(GVariant) sealed_image_fd = NULL;
   g_autoptr(GError) error = NULL;
 
   session = lookup_model_session (invocation, arg_session_handle, MODEL_SESSION_VISION);
@@ -590,6 +617,24 @@ handle_vision_stream_ocr (XdpDbusVision       *object,
     return G_DBUS_METHOD_INVOCATION_HANDLED;
 
   if (!model_request_options_validate (arg_options, &error))
+    {
+      g_dbus_method_invocation_return_gerror (invocation, error);
+      return G_DBUS_METHOD_INVOCATION_HANDLED;
+    }
+
+  sealed_image = xdp_sealed_fd_new_from_handle (arg_image_fd, fd_list, &error);
+  if (sealed_image == NULL)
+    {
+      g_dbus_method_invocation_return_error (invocation,
+                                             XDG_DESKTOP_PORTAL_ERROR,
+                                             XDG_DESKTOP_PORTAL_ERROR_INVALID_ARGUMENT,
+                                             "Invalid file descriptor: The file descriptor needs to be sealable");
+      return G_DBUS_METHOD_INVOCATION_HANDLED;
+    }
+
+  sealed_fd_list = g_unix_fd_list_new ();
+  sealed_image_fd = model_sealed_fd_to_handle (sealed_image, sealed_fd_list, &error);
+  if (sealed_image_fd == NULL)
     {
       g_dbus_method_invocation_return_gerror (invocation, error);
       return G_DBUS_METHOD_INVOCATION_HANDLED;
@@ -611,10 +656,11 @@ handle_vision_stream_ocr (XdpDbusVision       *object,
     }
 
   forward = vision_signal_forward_new (vision,
-                                         vision->impl,
-                                         request,
-                                         session->id,
-                                         VISION_CALL_STREAM_OCR);
+                                      vision->impl,
+                                      request,
+                                      session->id,
+                                      VISION_CALL_STREAM_OCR);
+  forward->sealed_media = g_object_ref (sealed_image);
   vision_signal_forward_connect_loading (forward);
   forward->handler_id = g_signal_connect (vision->impl,
                                           "vision-text-received",
@@ -624,9 +670,9 @@ handle_vision_stream_ocr (XdpDbusVision       *object,
   xdp_dbus_impl_vision_call_stream_ocr (vision->impl,
                                         xdp_request_get_object_path (request),
                                         session->id,
-                                        arg_image_fd,
+                                        sealed_image_fd,
                                         arg_instructions,
-                                        fd_list,
+                                        sealed_fd_list,
                                         NULL,
                                         finish_vision_call,
                                         forward);
@@ -651,6 +697,9 @@ handle_vision_stream_segment (XdpDbusVision       *object,
   ModelSession *model_session;
   XdpRequest *request = xdp_request_from_invocation (invocation);
   VisionSignalForward *forward;
+  g_autoptr(XdpSealedFd) sealed_image = NULL;
+  g_autoptr(GUnixFDList) sealed_fd_list = NULL;
+  g_autoptr(GVariant) sealed_image_fd = NULL;
   g_autoptr(GError) error = NULL;
 
   session = lookup_model_session (invocation, arg_session_handle, MODEL_SESSION_VISION);
@@ -664,6 +713,24 @@ handle_vision_stream_segment (XdpDbusVision       *object,
     return G_DBUS_METHOD_INVOCATION_HANDLED;
 
   if (!model_request_options_validate (arg_options, &error))
+    {
+      g_dbus_method_invocation_return_gerror (invocation, error);
+      return G_DBUS_METHOD_INVOCATION_HANDLED;
+    }
+
+  sealed_image = xdp_sealed_fd_new_from_handle (arg_image_fd, fd_list, &error);
+  if (sealed_image == NULL)
+    {
+      g_dbus_method_invocation_return_error (invocation,
+                                             XDG_DESKTOP_PORTAL_ERROR,
+                                             XDG_DESKTOP_PORTAL_ERROR_INVALID_ARGUMENT,
+                                             "Invalid file descriptor: The file descriptor needs to be sealable");
+      return G_DBUS_METHOD_INVOCATION_HANDLED;
+    }
+
+  sealed_fd_list = g_unix_fd_list_new ();
+  sealed_image_fd = model_sealed_fd_to_handle (sealed_image, sealed_fd_list, &error);
+  if (sealed_image_fd == NULL)
     {
       g_dbus_method_invocation_return_gerror (invocation, error);
       return G_DBUS_METHOD_INVOCATION_HANDLED;
@@ -685,10 +752,11 @@ handle_vision_stream_segment (XdpDbusVision       *object,
     }
 
   forward = vision_signal_forward_new (vision,
-                                         vision->impl,
-                                         request,
-                                         session->id,
-                                         VISION_CALL_STREAM_SEGMENT);
+                                      vision->impl,
+                                      request,
+                                      session->id,
+                                      VISION_CALL_STREAM_SEGMENT);
+  forward->sealed_media = g_object_ref (sealed_image);
   vision_signal_forward_connect_loading (forward);
   forward->handler_id = g_signal_connect (vision->impl,
                                           "vision-segments-received",
@@ -698,9 +766,9 @@ handle_vision_stream_segment (XdpDbusVision       *object,
   xdp_dbus_impl_vision_call_stream_segment (vision->impl,
                                             xdp_request_get_object_path (request),
                                             session->id,
-                                            arg_image_fd,
+                                            sealed_image_fd,
                                             arg_instructions,
-                                            fd_list,
+                                            sealed_fd_list,
                                             NULL,
                                             finish_vision_call,
                                             forward);

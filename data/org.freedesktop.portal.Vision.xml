@@ -80,7 +80,7 @@
     <!--
         StreamDescribe:
         @session_handle: A ``vision.describe`` session handle returned by CreateSession
-        @image_fd: Readable file descriptor containing PNG or JPEG image bytes.
+        @image_fd: Readable, sealable memfd containing PNG or JPEG image bytes.
         @instructions: Optional per-image instructions for this request.
         @options: Reserved vardict with optional ``handle_token`` string
         The method returns a Request handle immediately. Natural-language image
@@ -101,7 +101,7 @@
     <!--
         StreamOcr:
         @session_handle: A ``vision.ocr`` session handle returned by CreateSession
-        @image_fd: Readable file descriptor containing PNG or JPEG image bytes.
+        @image_fd: Readable, sealable memfd containing PNG or JPEG image bytes.
         @instructions: Optional per-image instructions for this request.
         @options: Reserved vardict with optional ``handle_token`` string
         The method returns a Request handle immediately. Text extracted from the
@@ -122,7 +122,7 @@
     <!--
         StreamSegment:
         @session_handle: A ``vision.segment`` session handle returned by CreateSession
-        @image_fd: Readable file descriptor containing PNG or JPEG image bytes.
+        @image_fd: Readable, sealable memfd containing PNG or JPEG image bytes.
         @instructions: Optional per-image instructions for this request.
         @options: Reserved vardict with optional ``handle_token`` string
         The method returns a Request handle immediately. Detected objects are

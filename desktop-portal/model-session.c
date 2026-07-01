@@ -7,6 +7,7 @@
 #include "model-session.h"
 
 #include <gio/gio.h>
+#include <gio/gunixfdlist.h>
 #include <string.h>
 
 #include "xdp-app-info.h"
@@ -358,6 +359,23 @@ model_request_options_validate (GVariant  *options,
   return xdp_filter_options (options, &options_builder,
                              request_options, G_N_ELEMENTS (request_options),
                              NULL, error);
+}
+
+GVariant *
+model_sealed_fd_to_handle (XdpSealedFd  *sealed_fd,
+                           GUnixFDList  *fd_list,
+                           GError      **error)
+{
+  int fd_out;
+
+  g_return_val_if_fail (XDP_IS_SEALED_FD (sealed_fd), NULL);
+  g_return_val_if_fail (G_IS_UNIX_FD_LIST (fd_list), NULL);
+
+  fd_out = g_unix_fd_list_append (fd_list, xdp_sealed_fd_get_fd (sealed_fd), error);
+  if (fd_out == -1)
+    return NULL;
+
+  return g_variant_ref_sink (g_variant_new_handle (fd_out));
 }
 
 gboolean

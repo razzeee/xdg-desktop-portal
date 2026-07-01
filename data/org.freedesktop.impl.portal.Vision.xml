@@ -40,7 +40,7 @@
 
     <!--
         StreamDescribe:
-        @image_fd: Readable file descriptor containing PNG or JPEG image bytes.
+        @image_fd: Readable, sealable memfd containing PNG or JPEG image bytes.
         @instructions: Optional per-image instructions for this request.
         Natural-language image description tokens are emitted as
         VisionTextReceived signals while this call is in progress.
@@ -55,7 +55,7 @@
 
     <!--
         StreamOcr:
-        @image_fd: Readable file descriptor containing PNG or JPEG image bytes.
+        @image_fd: Readable, sealable memfd containing PNG or JPEG image bytes.
         @instructions: Optional per-image instructions for this request.
         Text extracted from the image is emitted as VisionTextReceived signals
         while this call is in progress.
@@ -70,7 +70,7 @@
 
     <!--
         StreamSegment:
-        @image_fd: Readable file descriptor containing PNG or JPEG image bytes.
+        @image_fd: Readable, sealable memfd containing PNG or JPEG image bytes.
         @instructions: Optional per-image instructions for this request.
         Detected objects are emitted as VisionSegmentsReceived signals.
 

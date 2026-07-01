@@ -51,6 +51,7 @@ typedef struct _SpeechSignalForward
   XdpRequest *request;
   char *request_handle;
   char *session_handle;
+  XdpSealedFd *sealed_media;
   gulong loading_handler_id;
   gulong handler_id;
   guint call_kind;
@@ -119,6 +120,7 @@ speech_signal_forward_unref (SpeechSignalForward *forward)
   g_clear_object (&forward->speech);
   g_clear_object (&forward->impl);
   g_clear_object (&forward->request);
+  g_clear_object (&forward->sealed_media);
   g_clear_pointer (&forward->request_handle, g_free);
   g_clear_pointer (&forward->session_handle, g_free);
   g_free (forward);
@@ -469,6 +471,9 @@ handle_speech_stream_transcribe (XdpDbusSpeech       *object,
   ModelSession *model_session;
   XdpRequest *request = xdp_request_from_invocation (invocation);
   SpeechSignalForward *forward;
+  g_autoptr(XdpSealedFd) sealed_audio = NULL;
+  g_autoptr(GUnixFDList) sealed_fd_list = NULL;
+  g_autoptr(GVariant) sealed_audio_fd = NULL;
   g_autoptr(GError) error = NULL;
 
   session = lookup_model_session (invocation, arg_session_handle, MODEL_SESSION_SPEECH);
@@ -481,6 +486,24 @@ handle_speech_stream_transcribe (XdpDbusSpeech       *object,
     return G_DBUS_METHOD_INVOCATION_HANDLED;
 
   if (!model_request_options_validate (arg_options, &error))
+    {
+      g_dbus_method_invocation_return_gerror (invocation, error);
+      return G_DBUS_METHOD_INVOCATION_HANDLED;
+    }
+
+  sealed_audio = xdp_sealed_fd_new_from_handle (arg_audio_fd, fd_list, &error);
+  if (sealed_audio == NULL)
+    {
+      g_dbus_method_invocation_return_error (invocation,
+                                             XDG_DESKTOP_PORTAL_ERROR,
+                                             XDG_DESKTOP_PORTAL_ERROR_INVALID_ARGUMENT,
+                                             "Invalid file descriptor: The file descriptor needs to be sealable");
+      return G_DBUS_METHOD_INVOCATION_HANDLED;
+    }
+
+  sealed_fd_list = g_unix_fd_list_new ();
+  sealed_audio_fd = model_sealed_fd_to_handle (sealed_audio, sealed_fd_list, &error);
+  if (sealed_audio_fd == NULL)
     {
       g_dbus_method_invocation_return_gerror (invocation, error);
       return G_DBUS_METHOD_INVOCATION_HANDLED;
@@ -502,10 +525,11 @@ handle_speech_stream_transcribe (XdpDbusSpeech       *object,
     }
 
   forward = speech_signal_forward_new (speech,
-                                         speech->impl,
-                                         request,
-                                         session->id,
-                                         SPEECH_CALL_STREAM_TRANSCRIBE);
+                                       speech->impl,
+                                       request,
+                                       session->id,
+                                       SPEECH_CALL_STREAM_TRANSCRIBE);
+  forward->sealed_media = g_object_ref (sealed_audio);
   speech_signal_forward_connect_loading (forward);
   forward->handler_id = g_signal_connect (speech->impl,
                                           "transcription-received",
@@ -515,9 +539,9 @@ handle_speech_stream_transcribe (XdpDbusSpeech       *object,
   xdp_dbus_impl_speech_call_stream_transcribe (speech->impl,
                                                xdp_request_get_object_path (request),
                                                session->id,
-                                               arg_audio_fd,
+                                               sealed_audio_fd,
                                                arg_source_language_hint,
-                                               fd_list,
+                                               sealed_fd_list,
                                                NULL,
                                                finish_speech_call,
                                                forward);

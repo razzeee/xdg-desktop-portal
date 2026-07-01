@@ -4,6 +4,9 @@
 
 #pragma once
 
+#include <gio/gunixfdlist.h>
+
+#include "xdp-sealed-fd.h"
 #include "xdp-session.h"
 
 typedef enum _ModelSessionKind
@@ -69,6 +72,10 @@ gboolean model_session_options_validate (GVariant  *options,
 
 gboolean model_request_options_validate (GVariant  *options,
                                          GError   **error);
+
+GVariant *model_sealed_fd_to_handle (XdpSealedFd  *sealed_fd,
+                                     GUnixFDList  *fd_list,
+                                     GError      **error);
 
 gboolean model_request_export_with_impl (XdpRequest      *request,
                                          GDBusConnection *connection,

@@ -81,7 +81,7 @@
         StreamTranscribe:
 
         Starts streaming transcription or translation segments. In this
-        @audio_fd is a readable file descriptor containing 16 kHz mono f32le PCM.
+        @audio_fd is a readable, sealable memfd containing 16 kHz mono f32le PCM.
         @source_language_hint is the optional spoken input language hint.
         @options: Reserved vardict with optional ``handle_token`` string
         The method returns a Request handle immediately. Segments are emitted as

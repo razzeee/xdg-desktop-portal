@@ -42,7 +42,7 @@
         StreamTranscribe:
 
         Streams transcription or translation segments. @audio_fd is a readable
-        file descriptor containing 16 kHz mono f32le PCM. @source_language_hint
+        sealable memfd containing 16 kHz mono f32le PCM. @source_language_hint
         is the optional spoken input language hint.
         Payloads are emitted as TranscriptionReceived signals while this call
         is in progress.
