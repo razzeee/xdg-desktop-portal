@@ -1,0 +1,73 @@
+<?xml version="1.0"?>
+<!--
+  SPDX-License-Identifier: LGPL-2.1-or-later
+  SPDX-FileCopyrightText: Copyright © the xdg-desktop-portal contributors
+-->
+
+<node name="/" xmlns:doc="http://www.freedesktop.org/dbus/1.0/doc.dtd">
+  <!--
+      org.freedesktop.impl.portal.Speech:
+      @short_description: Local speech model backend interface
+  -->
+  <interface name="org.freedesktop.impl.portal.Speech">
+    <method name="GetUseCaseAvailability">
+      <arg type="s" name="app_id" direction="in"/>
+      <arg type="s" name="use_case" direction="in"/>
+      <arg type="(bss)" name="availability" direction="out"/>
+    </method>
+
+    <!--
+        CreateSession:
+        @use_case: ``speech.transcribe`` for source-language transcription,
+          or ``speech.translate`` for speech-to-English translation
+
+        The session @use_case selects whether StreamTranscribe returns a
+        verbatim source-language transcript or an English translation.
+    -->
+    <method name="CreateSession">
+      <arg type="o" name="handle" direction="in"/>
+      <arg type="o" name="session_handle" direction="in"/>
+      <arg type="s" name="app_id" direction="in"/>
+      <arg type="s" name="parent_window" direction="in"/>
+      <arg type="s" name="use_case" direction="in"/>
+      <arg type="s" name="instructions" direction="in"/>
+    </method>
+
+    <method name="Prewarm">
+      <arg type="o" name="handle" direction="in"/>
+      <arg type="o" name="session_handle" direction="in"/>
+    </method>
+
+    <!--
+        StreamTranscribe:
+
+        Streams transcription or translation segments. @audio_fd is a readable
+        sealable memfd containing 16 kHz mono f32le PCM. @source_language_hint
+        is the optional spoken input language hint.
+        Payloads are emitted as TranscriptionReceived signals while this call
+        is in progress.
+    -->
+    <method name="StreamTranscribe">
+      <annotation name="org.gtk.GDBus.C.UnixFD" value="true"/>
+      <arg type="o" name="handle" direction="in"/>
+      <arg type="o" name="session_handle" direction="in"/>
+      <arg type="h" name="audio_fd" direction="in"/>
+      <arg type="s" name="source_language_hint" direction="in"/>
+    </method>
+
+    <signal name="ModelLoading">
+      <arg type="o" name="handle"/>
+      <arg type="o" name="session_handle"/>
+      <arg type="s" name="message"/>
+    </signal>
+
+    <signal name="TranscriptionReceived">
+      <arg type="o" name="handle"/>
+      <arg type="o" name="session_handle"/>
+      <arg type="s" name="text"/>
+      <arg type="b" name="done"/>
+    </signal>
+
+    <property name="version" type="u" access="read"/>
+  </interface>
+</node>

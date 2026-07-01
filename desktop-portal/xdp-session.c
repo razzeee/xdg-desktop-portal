@@ -257,7 +257,7 @@ on_peer_disconnect (XdpContext *context,
 {
   XdpSession *session = XDP_SESSION (user_data);
 
-  SESSION_AUTOLOCK (session);
+  SESSION_AUTOLOCK_UNREF (g_object_ref (session));
 
   if (g_strcmp0 (session->sender, peer) != 0)
     return;

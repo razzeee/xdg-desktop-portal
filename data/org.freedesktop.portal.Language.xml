@@ -1,0 +1,234 @@
+<?xml version="1.0"?>
+<!--
+  SPDX-License-Identifier: LGPL-2.1-or-later
+  SPDX-FileCopyrightText: Copyright © the xdg-desktop-portal contributors
+-->
+
+<node name="/" xmlns:doc="http://www.freedesktop.org/dbus/1.0/doc.dtd">
+  <!--
+      org.freedesktop.portal.Language:
+      @short_description: Portal for local language model tasks
+
+      The Language portal lets sandboxed applications use local text model
+      capabilities selected and governed by the system portal backend.
+
+      Supported use-cases are ``language.summarize``, ``language.translate``,
+      ``language.rephrase``, ``language.complete``, ``language.classify``,
+      ``language.extract``, ``language.analyze``, and ``language.embed``.
+
+      Methods returning request handles accept the standard ``handle_token``
+      option. CreateSession also accepts ``session_handle_token``. Failed
+      request responses may include ``error`` and ``error_name`` strings in
+      the results vardict. Stream payload signals are sent only to the caller
+      that owns the request and are correlated by ``request_handle``.
+
+      StreamResponse, StreamPredictNext, StreamRespondGuided, and
+      StreamSubmitToolResultsGuided accept these generation options:
+      ``maximum_response_tokens`` (int64), ``source_language_hint`` (string),
+      and ``target_language_hint`` (string). Language hints only affect
+      ``language.translate`` sessions. ``temperature`` and ``sampling_mode``
+      are reserved for future sampling controls. StreamEmbed reserves its
+      options vardict except for standard request options.
+
+      This documentation describes version 1 of this interface.
+  -->
+  <interface name="org.freedesktop.portal.Language">
+    <!--
+        GetUseCaseAvailability:
+        @use_case: Task token such as ``language.summarize`` or ``language.translate``
+        @options: Reserved vardict; no keys are currently defined
+        @availability: Struct containing availability, code, and human-readable reason
+
+        Returns whether a local profile is assigned and runnable for @use_case.
+    -->
+    <method name="GetUseCaseAvailability">
+      <arg type="s" name="use_case" direction="in"/>
+      <annotation name="org.qtproject.QtDBus.QtTypeName.In1" value="QVariantMap"/>
+      <arg type="a{sv}" name="options" direction="in"/>
+      <arg type="(bss)" name="availability" direction="out"/>
+    </method>
+
+    <!--
+        CreateSession:
+        @parent_window: Identifier for the application window, see :doc:`window-identifiers`
+        @use_case: Supported language task token
+        @instructions: Stable system instructions for this session
+        @options: Vardict with optional ``handle_token`` and ``session_handle_token`` strings
+        @handle: Object path for the :ref:`org.freedesktop.portal.Request` object representing this call
+
+        Creates a language model session. The session handle is returned in
+        the :ref:`org.freedesktop.portal.Request::Response` signal using the
+        ``session_handle`` key.
+    -->
+    <method name="CreateSession">
+      <arg type="s" name="parent_window" direction="in"/>
+      <arg type="s" name="use_case" direction="in"/>
+      <arg type="s" name="instructions" direction="in"/>
+      <annotation name="org.qtproject.QtDBus.QtTypeName.In3" value="QVariantMap"/>
+      <arg type="a{sv}" name="options" direction="in"/>
+      <arg type="o" name="handle" direction="out"/>
+    </method>
+
+    <!--
+        Prewarm:
+        @session_handle: A language session handle returned by CreateSession
+        @options: Vardict with optional ``handle_token`` string
+        @handle: Object path for the :ref:`org.freedesktop.portal.Request` object representing this call
+
+        Starts the backing runtime before the first user-visible operation.
+        Completion, cancellation, and failures are reported through the
+        Request::Response signal.
+    -->
+    <method name="Prewarm">
+      <arg type="o" name="session_handle" direction="in"/>
+      <annotation name="org.qtproject.QtDBus.QtTypeName.In1" value="QVariantMap"/>
+      <arg type="a{sv}" name="options" direction="in"/>
+      <arg type="o" name="handle" direction="out"/>
+    </method>
+
+    <!--
+        StreamResponse:
+        @session_handle: A language generation session handle returned by CreateSession
+        @prompt: User/application prompt to answer
+        @options: Vardict with generation options and optional ``handle_token`` string
+
+        Starts streaming a language response. The method returns a Request
+        handle immediately. Output chunks are emitted as TokenReceived signals;
+        completion, cancellation, and failures are reported through the
+        Request::Response signal.
+    -->
+    <method name="StreamResponse">
+      <arg type="o" name="session_handle" direction="in"/>
+      <arg type="s" name="prompt" direction="in"/>
+      <annotation name="org.qtproject.QtDBus.QtTypeName.In2" value="QVariantMap"/>
+      <arg type="a{sv}" name="options" direction="in"/>
+      <arg type="o" name="handle" direction="out"/>
+    </method>
+
+    <!--
+        StreamPredictNext:
+        @session_handle: A ``language.complete`` session handle returned by CreateSession
+        @prefix: Raw text prefix to complete
+        @options: Vardict with generation options and optional ``handle_token`` string
+
+        Starts inline prediction for @prefix. A newer call for the same session
+        supersedes older in-flight prediction calls.
+    -->
+    <method name="StreamPredictNext">
+      <arg type="o" name="session_handle" direction="in"/>
+      <arg type="s" name="prefix" direction="in"/>
+      <annotation name="org.qtproject.QtDBus.QtTypeName.In2" value="QVariantMap"/>
+      <arg type="a{sv}" name="options" direction="in"/>
+      <arg type="o" name="handle" direction="out"/>
+    </method>
+
+    <!--
+        StreamRespondGuided:
+        @session_handle: A language generation session handle returned by CreateSession
+        @prompt: User/application prompt to answer
+        @fields: Guided output fields as ``(name, kind, description, required)`` structs
+        @tools: Tool definitions as ``(name, description, schema_json)`` structs
+        @options: Vardict with generation options and optional ``handle_token`` string
+
+        Starts streaming guided JSON snapshots. The method returns a Request
+        handle immediately. Snapshots and tool-call requests are emitted as
+        stream signals; completion, cancellation, and failures are reported
+        through the Request::Response signal.
+    -->
+    <method name="StreamRespondGuided">
+      <arg type="o" name="session_handle" direction="in"/>
+      <arg type="s" name="prompt" direction="in"/>
+      <arg type="a(sssb)" name="fields" direction="in"/>
+      <arg type="a(sss)" name="tools" direction="in"/>
+      <annotation name="org.qtproject.QtDBus.QtTypeName.In4" value="QVariantMap"/>
+      <arg type="a{sv}" name="options" direction="in"/>
+      <arg type="o" name="handle" direction="out"/>
+    </method>
+
+    <!--
+        StreamSubmitToolResultsGuided:
+        @session_handle: A language generation session handle returned by CreateSession
+        @prompt: User/application prompt to answer
+        @results: Tool results as ``(id, content, content_json)`` structs
+        @fields: Guided output fields as ``(name, kind, description, required)`` structs
+        @tools: Tool definitions as ``(name, description, schema_json)`` structs
+        @options: Vardict with generation options and optional ``handle_token`` string
+        @handle: Object path for the :ref:`org.freedesktop.portal.Request` object representing this call
+
+        Continues guided generation after the application executes or rejects
+        requested tool calls.
+    -->
+    <method name="StreamSubmitToolResultsGuided">
+      <arg type="o" name="session_handle" direction="in"/>
+      <arg type="s" name="prompt" direction="in"/>
+      <arg type="a(sss)" name="results" direction="in"/>
+      <arg type="a(sssb)" name="fields" direction="in"/>
+      <arg type="a(sss)" name="tools" direction="in"/>
+      <annotation name="org.qtproject.QtDBus.QtTypeName.In5" value="QVariantMap"/>
+      <arg type="a{sv}" name="options" direction="in"/>
+      <arg type="o" name="handle" direction="out"/>
+    </method>
+
+    <!--
+        StreamEmbed:
+        @session_handle: A ``language.embed`` session handle returned by CreateSession
+        @text: Text to embed
+        @options: Reserved vardict with optional ``handle_token`` string
+        @handle: Object path for the :ref:`org.freedesktop.portal.Request` object representing this call
+
+        Computes an embedding vector for @text. The result is emitted as one
+        EmbeddingReceived signal; completion, cancellation, and failures are
+        reported through the Request::Response signal.
+    -->
+    <method name="StreamEmbed">
+      <arg type="o" name="session_handle" direction="in"/>
+      <arg type="s" name="text" direction="in"/>
+      <annotation name="org.qtproject.QtDBus.QtTypeName.In2" value="QVariantMap"/>
+      <arg type="a{sv}" name="options" direction="in"/>
+      <arg type="o" name="handle" direction="out"/>
+    </method>
+
+    <signal name="ModelLoading">
+      <arg type="o" name="request_handle"/>
+      <arg type="o" name="session_handle"/>
+      <arg type="s" name="message"/>
+    </signal>
+
+    <signal name="TokenReceived">
+      <arg type="o" name="request_handle"/>
+      <arg type="o" name="session_handle"/>
+      <arg type="s" name="token"/>
+      <arg type="b" name="done"/>
+    </signal>
+
+    <signal name="PredictionReceived">
+      <arg type="o" name="request_handle"/>
+      <arg type="o" name="session_handle"/>
+      <arg type="s" name="completion"/>
+      <arg type="b" name="done"/>
+    </signal>
+
+    <signal name="GuidedSnapshotReceived">
+      <arg type="o" name="request_handle"/>
+      <arg type="o" name="session_handle"/>
+      <arg type="s" name="snapshot_json"/>
+      <arg type="b" name="done"/>
+    </signal>
+
+    <signal name="GuidedToolCallsReceived">
+      <arg type="o" name="request_handle"/>
+      <arg type="o" name="session_handle"/>
+      <arg type="a(sss)" name="tool_calls"/>
+      <arg type="b" name="done"/>
+    </signal>
+
+    <signal name="EmbeddingReceived">
+      <arg type="o" name="request_handle"/>
+      <arg type="o" name="session_handle"/>
+      <arg type="ad" name="embedding"/>
+      <arg type="b" name="done"/>
+    </signal>
+
+    <property name="version" type="u" access="read"/>
+  </interface>
+</node>
