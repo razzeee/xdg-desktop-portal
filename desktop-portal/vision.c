@@ -301,7 +301,9 @@ handle_vision_get_use_case_availability (XdpDbusVision       *object,
   if (!model_use_case_is_supported (MODEL_SESSION_VISION, arg_use_case))
     {
       availability = model_unsupported_use_case_availability (arg_use_case);
-      xdp_dbus_vision_complete_get_use_case_availability (object, invocation, availability);
+      xdp_dbus_vision_complete_get_use_case_availability (object,
+                                                          invocation,
+                                                          g_steal_pointer (&availability));
       return G_DBUS_METHOD_INVOCATION_HANDLED;
     }
 
@@ -316,7 +318,9 @@ handle_vision_get_use_case_availability (XdpDbusVision       *object,
       return G_DBUS_METHOD_INVOCATION_HANDLED;
     }
 
-  xdp_dbus_vision_complete_get_use_case_availability (object, invocation, availability);
+  xdp_dbus_vision_complete_get_use_case_availability (object,
+                                                      invocation,
+                                                      g_steal_pointer (&availability));
   return G_DBUS_METHOD_INVOCATION_HANDLED;
 }
 
@@ -750,7 +754,7 @@ vision_new (XdpContext        *context,
   vision->context = context;
   vision->impl = g_object_ref (impl);
   g_dbus_proxy_set_default_timeout (G_DBUS_PROXY (vision->impl), G_MAXINT);
-  xdp_dbus_vision_set_version (XDP_DBUS_VISION (vision), 4);
+  xdp_dbus_vision_set_version (XDP_DBUS_VISION (vision), 1);
 
   return vision;
 }

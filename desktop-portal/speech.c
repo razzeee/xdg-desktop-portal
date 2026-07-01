@@ -267,7 +267,9 @@ handle_speech_get_use_case_availability (XdpDbusSpeech       *object,
   if (!model_use_case_is_supported (MODEL_SESSION_SPEECH, arg_use_case))
     {
       availability = model_unsupported_use_case_availability (arg_use_case);
-      xdp_dbus_speech_complete_get_use_case_availability (object, invocation, availability);
+      xdp_dbus_speech_complete_get_use_case_availability (object,
+                                                          invocation,
+                                                          g_steal_pointer (&availability));
       return G_DBUS_METHOD_INVOCATION_HANDLED;
     }
 
@@ -282,7 +284,9 @@ handle_speech_get_use_case_availability (XdpDbusSpeech       *object,
       return G_DBUS_METHOD_INVOCATION_HANDLED;
     }
 
-  xdp_dbus_speech_complete_get_use_case_availability (object, invocation, availability);
+  xdp_dbus_speech_complete_get_use_case_availability (object,
+                                                      invocation,
+                                                      g_steal_pointer (&availability));
   return G_DBUS_METHOD_INVOCATION_HANDLED;
 }
 
@@ -565,7 +569,7 @@ speech_new (XdpContext        *context,
   speech->context = context;
   speech->impl = g_object_ref (impl);
   g_dbus_proxy_set_default_timeout (G_DBUS_PROXY (speech->impl), G_MAXINT);
-  xdp_dbus_speech_set_version (XDP_DBUS_SPEECH (speech), 4);
+  xdp_dbus_speech_set_version (XDP_DBUS_SPEECH (speech), 1);
 
   return speech;
 }

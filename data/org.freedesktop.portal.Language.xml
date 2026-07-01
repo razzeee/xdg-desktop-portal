@@ -24,13 +24,13 @@
 
       StreamResponse, StreamPredictNext, StreamRespondGuided, and
       StreamSubmitToolResultsGuided accept these generation options:
-      ``maximum_response_tokens`` (int64), ``temperature`` (double),
-      ``sampling_mode`` (string), ``source_language_hint`` (string), and
-      ``target_language_hint`` (string). Language hints only affect
-      ``language.translate`` sessions. StreamEmbed reserves its options
-      vardict except for standard request options.
+      ``maximum_response_tokens`` (int64), ``source_language_hint`` (string),
+      and ``target_language_hint`` (string). Language hints only affect
+      ``language.translate`` sessions. ``temperature`` and ``sampling_mode``
+      are reserved for future sampling controls. StreamEmbed reserves its
+      options vardict except for standard request options.
 
-      This documentation describes version 4 of this interface.
+      This documentation describes version 1 of this interface.
   -->
   <interface name="org.freedesktop.portal.Language">
     <!--

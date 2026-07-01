@@ -36,8 +36,6 @@ G_DEFINE_TYPE (ModelSession, model_session, xdp_session_get_type ())
 static XdpOptionKey generation_options[] = {
   { "handle_token", G_VARIANT_TYPE_STRING, NULL },
   { "maximum_response_tokens", G_VARIANT_TYPE_INT64, NULL },
-  { "temperature", G_VARIANT_TYPE_DOUBLE, NULL },
-  { "sampling_mode", G_VARIANT_TYPE_STRING, NULL },
   { "source_language_hint", G_VARIANT_TYPE_STRING, NULL },
   { "target_language_hint", G_VARIANT_TYPE_STRING, NULL },
 };

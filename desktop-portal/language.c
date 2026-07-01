@@ -391,7 +391,9 @@ handle_language_get_use_case_availability (XdpDbusLanguage      *object,
   if (!model_use_case_is_supported (MODEL_SESSION_LANGUAGE, arg_use_case))
     {
       availability = model_unsupported_use_case_availability (arg_use_case);
-      xdp_dbus_language_complete_get_use_case_availability (object, invocation, availability);
+      xdp_dbus_language_complete_get_use_case_availability (object,
+                                                            invocation,
+                                                            g_steal_pointer (&availability));
       return G_DBUS_METHOD_INVOCATION_HANDLED;
     }
 
@@ -406,7 +408,9 @@ handle_language_get_use_case_availability (XdpDbusLanguage      *object,
       return G_DBUS_METHOD_INVOCATION_HANDLED;
     }
 
-  xdp_dbus_language_complete_get_use_case_availability (object, invocation, availability);
+  xdp_dbus_language_complete_get_use_case_availability (object,
+                                                        invocation,
+                                                        g_steal_pointer (&availability));
   return G_DBUS_METHOD_INVOCATION_HANDLED;
 }
 
@@ -986,7 +990,7 @@ language_new (XdpContext          *context,
   language->context = context;
   language->impl = g_object_ref (impl);
   g_dbus_proxy_set_default_timeout (G_DBUS_PROXY (language->impl), G_MAXINT);
-  xdp_dbus_language_set_version (XDP_DBUS_LANGUAGE (language), 4);
+  xdp_dbus_language_set_version (XDP_DBUS_LANGUAGE (language), 1);
 
   return language;
 }

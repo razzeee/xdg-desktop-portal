@@ -19,7 +19,7 @@
       sent only to the caller that owns the request and are correlated by
       ``request_handle``.
 
-      This documentation describes version 4 of this interface.
+      This documentation describes version 1 of this interface.
   -->
   <interface name="org.freedesktop.portal.Vision">
     <!--
