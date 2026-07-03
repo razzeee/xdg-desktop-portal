@@ -129,6 +129,7 @@
         StreamRespondGuided:
         @session_handle: A language generation session handle returned by CreateSession
         @prompt: User/application prompt to answer
+        @media_fds: Unix fds referenced by media content parts in @prompt
         @fields: Guided output fields as ``(name, kind, description, required)`` structs
         @tools: Tool definitions as ``(name, description, schema_json)`` structs
         @options: Vardict with generation options and optional ``handle_token`` string
@@ -139,11 +140,13 @@
         through the Request::Response signal.
     -->
     <method name="StreamRespondGuided">
+      <annotation name="org.gtk.GDBus.C.UnixFD" value="true"/>
       <arg type="o" name="session_handle" direction="in"/>
       <arg type="s" name="prompt" direction="in"/>
+      <arg type="ah" name="media_fds" direction="in"/>
       <arg type="a(sssb)" name="fields" direction="in"/>
       <arg type="a(sss)" name="tools" direction="in"/>
-      <annotation name="org.qtproject.QtDBus.QtTypeName.In4" value="QVariantMap"/>
+      <annotation name="org.qtproject.QtDBus.QtTypeName.In5" value="QVariantMap"/>
       <arg type="a{sv}" name="options" direction="in"/>
       <arg type="o" name="handle" direction="out"/>
     </method>
@@ -152,6 +155,7 @@
         StreamSubmitToolResultsGuided:
         @session_handle: A language generation session handle returned by CreateSession
         @prompt: User/application prompt to answer
+        @media_fds: Unix fds referenced by media content parts in @prompt
         @results: Tool results as ``(id, content, content_json)`` structs
         @fields: Guided output fields as ``(name, kind, description, required)`` structs
         @tools: Tool definitions as ``(name, description, schema_json)`` structs
@@ -162,12 +166,14 @@
         requested tool calls.
     -->
     <method name="StreamSubmitToolResultsGuided">
+      <annotation name="org.gtk.GDBus.C.UnixFD" value="true"/>
       <arg type="o" name="session_handle" direction="in"/>
       <arg type="s" name="prompt" direction="in"/>
+      <arg type="ah" name="media_fds" direction="in"/>
       <arg type="a(sss)" name="results" direction="in"/>
       <arg type="a(sssb)" name="fields" direction="in"/>
       <arg type="a(sss)" name="tools" direction="in"/>
-      <annotation name="org.qtproject.QtDBus.QtTypeName.In5" value="QVariantMap"/>
+      <annotation name="org.qtproject.QtDBus.QtTypeName.In6" value="QVariantMap"/>
       <arg type="a{sv}" name="options" direction="in"/>
       <arg type="o" name="handle" direction="out"/>
     </method>

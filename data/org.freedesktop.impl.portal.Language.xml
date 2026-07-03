@@ -50,9 +50,11 @@
 
     <!-- Stream payloads are emitted as GuidedSnapshotReceived and/or GuidedToolCallsReceived signals while this call is in progress. -->
     <method name="StreamRespondGuided">
+      <annotation name="org.gtk.GDBus.C.UnixFD" value="true"/>
       <arg type="o" name="handle" direction="in"/>
       <arg type="o" name="session_handle" direction="in"/>
       <arg type="s" name="prompt" direction="in"/>
+      <arg type="ah" name="media_fds" direction="in"/>
       <arg type="a(sssb)" name="fields" direction="in"/>
       <arg type="a(sss)" name="tools" direction="in"/>
       <arg type="(xdsss)" name="options" direction="in"/>
@@ -60,9 +62,11 @@
 
     <!-- Stream payloads are emitted as GuidedSnapshotReceived and/or GuidedToolCallsReceived signals while this call is in progress. -->
     <method name="StreamSubmitToolResultsGuided">
+      <annotation name="org.gtk.GDBus.C.UnixFD" value="true"/>
       <arg type="o" name="handle" direction="in"/>
       <arg type="o" name="session_handle" direction="in"/>
       <arg type="s" name="prompt" direction="in"/>
+      <arg type="ah" name="media_fds" direction="in"/>
       <arg type="a(sss)" name="results" direction="in"/>
       <arg type="a(sssb)" name="fields" direction="in"/>
       <arg type="a(sss)" name="tools" direction="in"/>

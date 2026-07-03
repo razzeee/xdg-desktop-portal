@@ -266,10 +266,16 @@ finish_language_call (GObject      *source,
       }
       break;
     case LANGUAGE_CALL_STREAM_RESPOND_GUIDED:
-      ok = xdp_dbus_impl_language_call_stream_respond_guided_finish (impl, result, &error);
+      {
+        g_autoptr(GUnixFDList) out_fd_list = NULL;
+        ok = xdp_dbus_impl_language_call_stream_respond_guided_finish (impl, &out_fd_list, result, &error);
+      }
       break;
     case LANGUAGE_CALL_STREAM_SUBMIT_TOOL_RESULTS_GUIDED:
-      ok = xdp_dbus_impl_language_call_stream_submit_tool_results_guided_finish (impl, result, &error);
+      {
+        g_autoptr(GUnixFDList) out_fd_list = NULL;
+        ok = xdp_dbus_impl_language_call_stream_submit_tool_results_guided_finish (impl, &out_fd_list, result, &error);
+      }
       break;
     case LANGUAGE_CALL_STREAM_EMBED:
       ok = xdp_dbus_impl_language_call_stream_embed_finish (impl, result, &error);
@@ -789,17 +795,22 @@ handle_language_stream_response (XdpDbusLanguage      *object,
 
 static gboolean
 handle_language_stream_respond_guided (XdpDbusLanguage      *object,
-                                       GDBusMethodInvocation *invocation,
-                                       const char            *arg_session_handle,
-                                       const char            *arg_prompt,
-                                       GVariant              *arg_fields,
-                                       GVariant              *arg_tools,
-                                       GVariant              *arg_options)
+                                        GDBusMethodInvocation *invocation,
+                                        GUnixFDList          *fd_list,
+                                        const char            *arg_session_handle,
+                                        const char            *arg_prompt,
+                                        GVariant              *arg_media_fds,
+                                        GVariant              *arg_fields,
+                                        GVariant              *arg_tools,
+                                        GVariant              *arg_options)
 {
   Language *language = (Language *) object;
   g_autoptr(XdpSession) session = NULL;
   ModelSession *model_session;
   g_autoptr(GVariant) options = NULL;
+  g_autoptr(GUnixFDList) sealed_fd_list = NULL;
+  g_autoptr(GVariant) sealed_media_fds = NULL;
+  g_autoptr(GPtrArray) sealed_media = NULL;
   g_autoptr(GError) error = NULL;
   XdpRequest *request = xdp_request_from_invocation (invocation);
   LanguageSignalForward *forward;
@@ -815,6 +826,20 @@ handle_language_stream_respond_guided (XdpDbusLanguage      *object,
   if (options == NULL)
     {
       g_dbus_method_invocation_return_gerror (invocation, error);
+      return G_DBUS_METHOD_INVOCATION_HANDLED;
+    }
+
+  if (!seal_media_fds (arg_media_fds,
+                       fd_list,
+                       &sealed_media_fds,
+                       &sealed_fd_list,
+                       &sealed_media,
+                       &error))
+    {
+      g_dbus_method_invocation_return_error (invocation,
+                                             XDG_DESKTOP_PORTAL_ERROR,
+                                             XDG_DESKTOP_PORTAL_ERROR_INVALID_ARGUMENT,
+                                             "Invalid file descriptor: The file descriptor needs to be sealable");
       return G_DBUS_METHOD_INVOCATION_HANDLED;
     }
 
@@ -836,9 +861,10 @@ handle_language_stream_respond_guided (XdpDbusLanguage      *object,
   forward = language_signal_forward_new (language,
                                            language->impl,
                                            request,
-                                           session->id,
-                                           LANGUAGE_CALL_STREAM_RESPOND_GUIDED);
+                                            session->id,
+                                            LANGUAGE_CALL_STREAM_RESPOND_GUIDED);
   language_signal_forward_connect_loading (forward);
+  forward->sealed_media = g_steal_pointer (&sealed_media);
   forward->handler_id = g_signal_connect (language->impl,
                                           "guided-snapshot-received",
                                           G_CALLBACK (forward_guided_snapshot_received),
@@ -849,35 +875,43 @@ handle_language_stream_respond_guided (XdpDbusLanguage      *object,
                                                   forward);
 
   xdp_dbus_impl_language_call_stream_respond_guided (language->impl,
-                                                     xdp_request_get_object_path (request),
-                                                     session->id,
-                                                     arg_prompt,
-                                                     arg_fields,
-                                                     arg_tools,
-                                                     options,
-                                         NULL,
-                                                     finish_language_call,
-                                                     forward);
+                                                      xdp_request_get_object_path (request),
+                                                      session->id,
+                                                      arg_prompt,
+                                                      sealed_media_fds,
+                                                      arg_fields,
+                                                      arg_tools,
+                                                      options,
+                                                      sealed_fd_list,
+                                                      NULL,
+                                                      finish_language_call,
+                                                      forward);
   xdp_dbus_language_complete_stream_respond_guided (object,
                                                    invocation,
+                                                   NULL,
                                                    xdp_request_get_object_path (request));
   return G_DBUS_METHOD_INVOCATION_HANDLED;
 }
 
 static gboolean
 handle_language_stream_submit_tool_results_guided (XdpDbusLanguage      *object,
-                                                   GDBusMethodInvocation *invocation,
-                                                   const char            *arg_session_handle,
-                                                   const char            *arg_prompt,
-                                                   GVariant              *arg_results,
-                                                   GVariant              *arg_fields,
-                                                   GVariant              *arg_tools,
+                                                    GDBusMethodInvocation *invocation,
+                                                    GUnixFDList          *fd_list,
+                                                    const char            *arg_session_handle,
+                                                    const char            *arg_prompt,
+                                                    GVariant              *arg_media_fds,
+                                                    GVariant              *arg_results,
+                                                    GVariant              *arg_fields,
+                                                    GVariant              *arg_tools,
                                                    GVariant              *arg_options)
 {
   Language *language = (Language *) object;
   g_autoptr(XdpSession) session = NULL;
   ModelSession *model_session;
   g_autoptr(GVariant) options = NULL;
+  g_autoptr(GUnixFDList) sealed_fd_list = NULL;
+  g_autoptr(GVariant) sealed_media_fds = NULL;
+  g_autoptr(GPtrArray) sealed_media = NULL;
   g_autoptr(GError) error = NULL;
   XdpRequest *request = xdp_request_from_invocation (invocation);
   LanguageSignalForward *forward;
@@ -893,6 +927,20 @@ handle_language_stream_submit_tool_results_guided (XdpDbusLanguage      *object,
   if (options == NULL)
     {
       g_dbus_method_invocation_return_gerror (invocation, error);
+      return G_DBUS_METHOD_INVOCATION_HANDLED;
+    }
+
+  if (!seal_media_fds (arg_media_fds,
+                       fd_list,
+                       &sealed_media_fds,
+                       &sealed_fd_list,
+                       &sealed_media,
+                       &error))
+    {
+      g_dbus_method_invocation_return_error (invocation,
+                                             XDG_DESKTOP_PORTAL_ERROR,
+                                             XDG_DESKTOP_PORTAL_ERROR_INVALID_ARGUMENT,
+                                             "Invalid file descriptor: The file descriptor needs to be sealable");
       return G_DBUS_METHOD_INVOCATION_HANDLED;
     }
 
@@ -914,9 +962,10 @@ handle_language_stream_submit_tool_results_guided (XdpDbusLanguage      *object,
   forward = language_signal_forward_new (language,
                                            language->impl,
                                            request,
-                                           session->id,
-                                           LANGUAGE_CALL_STREAM_SUBMIT_TOOL_RESULTS_GUIDED);
+                                            session->id,
+                                            LANGUAGE_CALL_STREAM_SUBMIT_TOOL_RESULTS_GUIDED);
   language_signal_forward_connect_loading (forward);
+  forward->sealed_media = g_steal_pointer (&sealed_media);
   forward->handler_id = g_signal_connect (language->impl,
                                           "guided-snapshot-received",
                                           G_CALLBACK (forward_guided_snapshot_received),
@@ -927,19 +976,22 @@ handle_language_stream_submit_tool_results_guided (XdpDbusLanguage      *object,
                                                   forward);
 
   xdp_dbus_impl_language_call_stream_submit_tool_results_guided (language->impl,
-                                                                 xdp_request_get_object_path (request),
-                                                                 session->id,
-                                                                 arg_prompt,
-                                                                 arg_results,
-                                                                 arg_fields,
-                                                                 arg_tools,
-                                                                 options,
-                                                     NULL,
-                                                                 finish_language_call,
-                                                                 forward);
+                                                                  xdp_request_get_object_path (request),
+                                                                  session->id,
+                                                                  arg_prompt,
+                                                                  sealed_media_fds,
+                                                                  arg_results,
+                                                                  arg_fields,
+                                                                  arg_tools,
+                                                                  options,
+                                                                  sealed_fd_list,
+                                                                  NULL,
+                                                                  finish_language_call,
+                                                                  forward);
   xdp_dbus_language_complete_stream_submit_tool_results_guided (object,
-                                                               invocation,
-                                                               xdp_request_get_object_path (request));
+                                                                invocation,
+                                                                NULL,
+                                                                xdp_request_get_object_path (request));
   return G_DBUS_METHOD_INVOCATION_HANDLED;
 }
 
