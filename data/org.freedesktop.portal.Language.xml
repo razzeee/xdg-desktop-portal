@@ -89,7 +89,8 @@
     <!--
         StreamResponse:
         @session_handle: A language generation session handle returned by CreateSession
-        @prompt: User/application prompt to answer
+        @input_json: JSON content parts or role messages to answer
+        @media_fds: Unix fds referenced by media content parts
         @options: Vardict with generation options and optional ``handle_token`` string
 
         Starts streaming a language response. The method returns a Request
@@ -98,9 +99,11 @@
         Request::Response signal.
     -->
     <method name="StreamResponse">
+      <annotation name="org.gtk.GDBus.C.UnixFD" value="true"/>
       <arg type="o" name="session_handle" direction="in"/>
-      <arg type="s" name="prompt" direction="in"/>
-      <annotation name="org.qtproject.QtDBus.QtTypeName.In2" value="QVariantMap"/>
+      <arg type="s" name="input_json" direction="in"/>
+      <arg type="ah" name="media_fds" direction="in"/>
+      <annotation name="org.qtproject.QtDBus.QtTypeName.In3" value="QVariantMap"/>
       <arg type="a{sv}" name="options" direction="in"/>
       <arg type="o" name="handle" direction="out"/>
     </method>

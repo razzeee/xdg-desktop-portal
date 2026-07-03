@@ -54,6 +54,7 @@ typedef struct _LanguageSignalForward
   gulong handler_id;
   gulong sibling_handler_id;
   guint call_kind;
+  GPtrArray *sealed_media;
 } LanguageSignalForward;
 
 typedef enum
@@ -125,7 +126,47 @@ language_signal_forward_unref (LanguageSignalForward *forward)
   g_clear_object (&forward->request);
   g_clear_pointer (&forward->request_handle, g_free);
   g_clear_pointer (&forward->session_handle, g_free);
+  g_clear_pointer (&forward->sealed_media, g_ptr_array_unref);
   g_free (forward);
+}
+
+static gboolean
+seal_media_fds (GVariant       *media_fds,
+                GUnixFDList    *fd_list,
+                GVariant      **sealed_media_fds_out,
+                GUnixFDList   **sealed_fd_list_out,
+                GPtrArray     **sealed_media_out,
+                GError        **error)
+{
+  g_autoptr(GUnixFDList) sealed_fd_list = g_unix_fd_list_new ();
+  g_autoptr(GPtrArray) sealed_media = g_ptr_array_new_with_free_func (g_object_unref);
+  g_auto(GVariantBuilder) builder = G_VARIANT_BUILDER_INIT (G_VARIANT_TYPE ("ah"));
+  GVariantIter iter;
+  gint32 handle;
+
+  g_variant_iter_init (&iter, media_fds);
+  while (g_variant_iter_next (&iter, "h", &handle))
+    {
+      g_autoptr(GVariant) handle_variant = g_variant_ref_sink (g_variant_new_handle (handle));
+      g_autoptr(GVariant) sealed_handle = NULL;
+      g_autoptr(XdpSealedFd) sealed_fd = NULL;
+
+      sealed_fd = xdp_sealed_fd_new_from_handle (handle_variant, fd_list, error);
+      if (sealed_fd == NULL)
+        return FALSE;
+
+      sealed_handle = model_sealed_fd_to_handle (sealed_fd, sealed_fd_list, error);
+      if (sealed_handle == NULL)
+        return FALSE;
+
+      g_variant_builder_add_value (&builder, sealed_handle);
+      g_ptr_array_add (sealed_media, g_steal_pointer (&sealed_fd));
+    }
+
+  *sealed_media_fds_out = g_variant_ref_sink (g_variant_builder_end (&builder));
+  *sealed_fd_list_out = g_steal_pointer (&sealed_fd_list);
+  *sealed_media_out = g_steal_pointer (&sealed_media);
+  return TRUE;
 }
 
 static void
@@ -219,7 +260,10 @@ finish_language_call (GObject      *source,
       ok = xdp_dbus_impl_language_call_stream_predict_next_finish (impl, result, &error);
       break;
     case LANGUAGE_CALL_STREAM_RESPONSE:
-      ok = xdp_dbus_impl_language_call_stream_response_finish (impl, result, &error);
+      {
+        g_autoptr(GUnixFDList) out_fd_list = NULL;
+        ok = xdp_dbus_impl_language_call_stream_response_finish (impl, &out_fd_list, result, &error);
+      }
       break;
     case LANGUAGE_CALL_STREAM_RESPOND_GUIDED:
       ok = xdp_dbus_impl_language_call_stream_respond_guided_finish (impl, result, &error);
@@ -653,15 +697,20 @@ handle_language_stream_predict_next (XdpDbusLanguage      *object,
 
 static gboolean
 handle_language_stream_response (XdpDbusLanguage      *object,
-                                 GDBusMethodInvocation *invocation,
-                                 const char            *arg_session_handle,
-                                 const char            *arg_prompt,
-                                 GVariant              *arg_options)
+                                  GDBusMethodInvocation *invocation,
+                                  GUnixFDList          *fd_list,
+                                  const char            *arg_session_handle,
+                                  const char            *arg_input_json,
+                                  GVariant              *arg_media_fds,
+                                  GVariant              *arg_options)
 {
   Language *language = (Language *) object;
   g_autoptr(XdpSession) session = NULL;
   ModelSession *model_session;
   g_autoptr(GVariant) options = NULL;
+  g_autoptr(GUnixFDList) sealed_fd_list = NULL;
+  g_autoptr(GVariant) sealed_media_fds = NULL;
+  g_autoptr(GPtrArray) sealed_media = NULL;
   g_autoptr(GError) error = NULL;
   XdpRequest *request = xdp_request_from_invocation (invocation);
   LanguageSignalForward *forward;
@@ -677,6 +726,20 @@ handle_language_stream_response (XdpDbusLanguage      *object,
   if (options == NULL)
     {
       g_dbus_method_invocation_return_gerror (invocation, error);
+      return G_DBUS_METHOD_INVOCATION_HANDLED;
+    }
+
+  if (!seal_media_fds (arg_media_fds,
+                       fd_list,
+                       &sealed_media_fds,
+                       &sealed_fd_list,
+                       &sealed_media,
+                       &error))
+    {
+      g_dbus_method_invocation_return_error (invocation,
+                                             XDG_DESKTOP_PORTAL_ERROR,
+                                             XDG_DESKTOP_PORTAL_ERROR_INVALID_ARGUMENT,
+                                             "Invalid file descriptor: The file descriptor needs to be sealable");
       return G_DBUS_METHOD_INVOCATION_HANDLED;
     }
 
@@ -701,22 +764,26 @@ handle_language_stream_response (XdpDbusLanguage      *object,
                                            session->id,
                                            LANGUAGE_CALL_STREAM_RESPONSE);
   language_signal_forward_connect_loading (forward);
+  forward->sealed_media = g_steal_pointer (&sealed_media);
   forward->handler_id = g_signal_connect (language->impl,
                                           "token-received",
                                           G_CALLBACK (forward_token_received),
                                           forward);
 
   xdp_dbus_impl_language_call_stream_response (language->impl,
-                                               xdp_request_get_object_path (request),
-                                               session->id,
-                                               arg_prompt,
-                                               options,
-                                               NULL,
-                                               finish_language_call,
-                                               forward);
+                                                xdp_request_get_object_path (request),
+                                                session->id,
+                                                arg_input_json,
+                                                sealed_media_fds,
+                                                options,
+                                                sealed_fd_list,
+                                                NULL,
+                                                finish_language_call,
+                                                forward);
   xdp_dbus_language_complete_stream_response (object,
-                                             invocation,
-                                             xdp_request_get_object_path (request));
+                                              invocation,
+                                              NULL,
+                                              xdp_request_get_object_path (request));
   return G_DBUS_METHOD_INVOCATION_HANDLED;
 }
 
