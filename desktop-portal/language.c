@@ -54,6 +54,8 @@ typedef struct _LanguageSignalForward
   gulong handler_id;
   gulong sibling_handler_id;
   guint call_kind;
+  gboolean call_finished;
+  gboolean terminal_signal_seen;
   GPtrArray *sealed_media;
 } LanguageSignalForward;
 
@@ -189,6 +191,25 @@ language_signal_forward_disconnect (LanguageSignalForward *forward)
     g_signal_handler_disconnect (impl, handler_id);
 }
 
+static gboolean
+language_call_kind_is_stream (LanguageCallKind call_kind)
+{
+  return call_kind != LANGUAGE_CALL_PREWARM;
+}
+
+static void
+language_signal_forward_mark_terminal (LanguageSignalForward *forward)
+{
+  forward->terminal_signal_seen = TRUE;
+  language_signal_forward_disconnect (forward);
+
+  if (forward->call_finished)
+    {
+      model_request_emit_response (forward->request, 0, NULL);
+      language_signal_forward_unref (forward);
+    }
+}
+
 static void
 language_emit_signal_to_request (LanguageSignalForward *forward,
                                  const char            *signal_name,
@@ -282,10 +303,9 @@ finish_language_call (GObject      *source,
       break;
     }
 
-  language_signal_forward_disconnect (forward);
-
   if (!ok)
     {
+      language_signal_forward_disconnect (forward);
       model_request_emit_response (forward->request,
                                    model_response_from_error (error),
                                    error->message);
@@ -293,7 +313,17 @@ finish_language_call (GObject      *source,
       return;
     }
 
+  forward->call_finished = TRUE;
+
+  if (language_call_kind_is_stream ((LanguageCallKind) forward->call_kind) &&
+      !forward->terminal_signal_seen)
+    return;
+
   model_request_emit_response (forward->request, 0, NULL);
+
+  if (!language_call_kind_is_stream ((LanguageCallKind) forward->call_kind))
+    language_signal_forward_disconnect (forward);
+
   language_signal_forward_unref (forward);
 }
 
@@ -320,7 +350,7 @@ forward_token_received (XdpDbusImplLanguage *impl,
                                                   done));
 
   if (done)
-    language_signal_forward_disconnect (forward);
+    language_signal_forward_mark_terminal (forward);
 }
 
 static void
@@ -346,7 +376,7 @@ forward_prediction_received (XdpDbusImplLanguage *impl,
                                                   done));
 
   if (done)
-    language_signal_forward_disconnect (forward);
+    language_signal_forward_mark_terminal (forward);
 }
 
 static void
@@ -372,7 +402,7 @@ forward_guided_snapshot_received (XdpDbusImplLanguage *impl,
                                                   done));
 
   if (done)
-    language_signal_forward_disconnect (forward);
+    language_signal_forward_mark_terminal (forward);
 }
 
 static void
@@ -398,7 +428,7 @@ forward_guided_tool_calls_received (XdpDbusImplLanguage *impl,
                                                   done));
 
   if (done)
-    language_signal_forward_disconnect (forward);
+    language_signal_forward_mark_terminal (forward);
 }
 
 static void
@@ -424,7 +454,7 @@ forward_embedding_received (XdpDbusImplLanguage *impl,
                                                   done));
 
   if (done)
-    language_signal_forward_disconnect (forward);
+    language_signal_forward_mark_terminal (forward);
 }
 
 static gboolean

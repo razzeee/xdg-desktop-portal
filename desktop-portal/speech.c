@@ -55,6 +55,8 @@ typedef struct _SpeechSignalForward
   gulong loading_handler_id;
   gulong handler_id;
   guint call_kind;
+  gboolean call_finished;
+  gboolean terminal_signal_seen;
 } SpeechSignalForward;
 
 typedef enum
@@ -194,6 +196,25 @@ speech_signal_forward_connect_loading (SpeechSignalForward *forward)
                                                   forward);
 }
 
+static gboolean
+speech_call_kind_is_stream (SpeechCallKind call_kind)
+{
+  return call_kind != SPEECH_CALL_PREWARM;
+}
+
+static void
+speech_signal_forward_mark_terminal (SpeechSignalForward *forward)
+{
+  forward->terminal_signal_seen = TRUE;
+  speech_signal_forward_disconnect (forward);
+
+  if (forward->call_finished)
+    {
+      model_request_emit_response (forward->request, 0, NULL);
+      speech_signal_forward_unref (forward);
+    }
+}
+
 static void
 finish_speech_call (GObject      *source,
                     GAsyncResult *result,
@@ -214,10 +235,9 @@ finish_speech_call (GObject      *source,
       break;
     }
 
-  speech_signal_forward_disconnect (forward);
-
   if (!ok)
     {
+      speech_signal_forward_disconnect (forward);
       model_request_emit_response (forward->request,
                                    model_response_from_error (error),
                                    error->message);
@@ -225,7 +245,17 @@ finish_speech_call (GObject      *source,
       return;
     }
 
+  forward->call_finished = TRUE;
+
+  if (speech_call_kind_is_stream ((SpeechCallKind) forward->call_kind) &&
+      !forward->terminal_signal_seen)
+    return;
+
   model_request_emit_response (forward->request, 0, NULL);
+
+  if (!speech_call_kind_is_stream ((SpeechCallKind) forward->call_kind))
+    speech_signal_forward_disconnect (forward);
+
   speech_signal_forward_unref (forward);
 }
 
@@ -252,7 +282,7 @@ forward_transcription_received (XdpDbusImplSpeech *impl,
                                                 done));
 
   if (done)
-    speech_signal_forward_disconnect (forward);
+    speech_signal_forward_mark_terminal (forward);
 }
 
 static gboolean

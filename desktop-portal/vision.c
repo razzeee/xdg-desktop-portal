@@ -55,6 +55,8 @@ typedef struct _VisionSignalForward
   gulong loading_handler_id;
   gulong handler_id;
   guint call_kind;
+  gboolean call_finished;
+  gboolean terminal_signal_seen;
 } VisionSignalForward;
 
 typedef enum
@@ -196,6 +198,25 @@ vision_signal_forward_connect_loading (VisionSignalForward *forward)
                                                   forward);
 }
 
+static gboolean
+vision_call_kind_is_stream (VisionCallKind call_kind)
+{
+  return call_kind != VISION_CALL_PREWARM;
+}
+
+static void
+vision_signal_forward_mark_terminal (VisionSignalForward *forward)
+{
+  forward->terminal_signal_seen = TRUE;
+  vision_signal_forward_disconnect (forward);
+
+  if (forward->call_finished)
+    {
+      model_request_emit_response (forward->request, 0, NULL);
+      vision_signal_forward_unref (forward);
+    }
+}
+
 static void
 finish_vision_call (GObject      *source,
                     GAsyncResult *result,
@@ -222,10 +243,9 @@ finish_vision_call (GObject      *source,
       break;
     }
 
-  vision_signal_forward_disconnect (forward);
-
   if (!ok)
     {
+      vision_signal_forward_disconnect (forward);
       model_request_emit_response (forward->request,
                                    model_response_from_error (error),
                                    error->message);
@@ -233,7 +253,17 @@ finish_vision_call (GObject      *source,
       return;
     }
 
+  forward->call_finished = TRUE;
+
+  if (vision_call_kind_is_stream ((VisionCallKind) forward->call_kind) &&
+      !forward->terminal_signal_seen)
+    return;
+
   model_request_emit_response (forward->request, 0, NULL);
+
+  if (!vision_call_kind_is_stream ((VisionCallKind) forward->call_kind))
+    vision_signal_forward_disconnect (forward);
+
   vision_signal_forward_unref (forward);
 }
 
@@ -260,7 +290,7 @@ forward_vision_text_received (XdpDbusImplVision *impl,
                                                 done));
 
   if (done)
-    vision_signal_forward_disconnect (forward);
+    vision_signal_forward_mark_terminal (forward);
 }
 
 static void
@@ -286,7 +316,7 @@ forward_vision_segments_received (XdpDbusImplVision *impl,
                                                 done));
 
   if (done)
-    vision_signal_forward_disconnect (forward);
+    vision_signal_forward_mark_terminal (forward);
 }
 
 static gboolean
