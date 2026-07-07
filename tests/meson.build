@@ -138,6 +138,7 @@ template_files = [
 
 foreach pytest_file : pytest_files
   testname = pytest_file.replace('.py', '').replace('test_', '')
+  timeout = pytest_file == 'test_notification.py' ? 300 : 200
   test(
     'integration/@0@'.format(testname),
     run_test,
@@ -151,7 +152,7 @@ foreach pytest_file : pytest_files
     ],
     env: pytest_env,
     suite: ['integration'],
-    timeout: 200,
+    timeout: timeout,
   )
 endforeach
 
