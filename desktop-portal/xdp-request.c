@@ -64,12 +64,14 @@ xdp_request_handle_close (XdpDbusRequest        *object,
     {
       if (request->impl_request &&
           !xdp_dbus_impl_request_call_close_sync (request->impl_request,
-                                                  NULL, &error))
+                                                   NULL, &error))
         {
-          if (invocation)
-            g_dbus_method_invocation_return_gerror (invocation, error);
-          return G_DBUS_METHOD_INVOCATION_HANDLED;
+          g_warning ("Failed to close request implementation: %s", error->message);
+          g_clear_error (&error);
         }
+
+      if (request->cancellable)
+        g_cancellable_cancel (request->cancellable);
 
       xdp_request_unexport (request);
     }
@@ -91,6 +93,7 @@ static void
 xdp_request_init (XdpRequest *request)
 {
   g_mutex_init (&request->mutex);
+  request->cancellable = g_cancellable_new ();
 }
 
 static void
@@ -101,6 +104,7 @@ xdp_request_finalize (GObject *object)
   xdp_context_unclaim_object_path (request->context, request->id);
 
   g_clear_object (&request->impl_request);
+  g_clear_object (&request->cancellable);
   g_clear_pointer (&request->sender, g_free);
   g_clear_pointer (&request->id, g_free);
   g_mutex_clear (&request->mutex);
@@ -197,6 +201,9 @@ on_peer_disconnect (XdpContext *context,
   if (request->impl_request)
     xdp_dbus_impl_request_call_close (request->impl_request, NULL, NULL, NULL);
 
+  if (request->cancellable)
+    g_cancellable_cancel (request->cancellable);
+
   xdp_request_unexport (request);
   xdp_context_unclaim_object_path (request->context, request->id);
 }
@@ -271,6 +278,12 @@ const char *
 xdp_request_get_object_path (XdpRequest *request)
 {
   return request->id;
+}
+
+GCancellable *
+xdp_request_get_cancellable (XdpRequest *request)
+{
+  return request->cancellable;
 }
 
 void
