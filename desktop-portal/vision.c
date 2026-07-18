@@ -64,7 +64,9 @@ typedef enum
   VISION_CALL_PREWARM,
   VISION_CALL_STREAM_DESCRIBE,
   VISION_CALL_STREAM_OCR,
+  VISION_CALL_STREAM_DETECT,
   VISION_CALL_STREAM_SEGMENT,
+  VISION_CALL_STREAM_DEPTH,
 } VisionCallKind;
 
 typedef struct _VisionCreateSession
@@ -238,8 +240,14 @@ finish_vision_call (GObject      *source,
     case VISION_CALL_STREAM_OCR:
       ok = xdp_dbus_impl_vision_call_stream_ocr_finish (impl, NULL, result, &error);
       break;
+    case VISION_CALL_STREAM_DETECT:
+      ok = xdp_dbus_impl_vision_call_stream_detect_finish (impl, NULL, result, &error);
+      break;
     case VISION_CALL_STREAM_SEGMENT:
       ok = xdp_dbus_impl_vision_call_stream_segment_finish (impl, NULL, result, &error);
+      break;
+    case VISION_CALL_STREAM_DEPTH:
+      ok = xdp_dbus_impl_vision_call_stream_depth_finish (impl, NULL, result, &error);
       break;
     }
 
@@ -294,12 +302,12 @@ forward_vision_text_received (XdpDbusImplVision *impl,
 }
 
 static void
-forward_vision_segments_received (XdpDbusImplVision *impl,
-                                  const char        *request_id,
-                                  const char        *session_id,
-                                  GVariant          *segments,
-                                  gboolean           done,
-                                  gpointer           user_data)
+forward_vision_detections_received (XdpDbusImplVision *impl,
+                                    const char        *request_id,
+                                    const char        *session_id,
+                                    GVariant          *detections,
+                                    gboolean           done,
+                                    gpointer           user_data)
 {
   VisionSignalForward *forward = user_data;
 
@@ -308,11 +316,63 @@ forward_vision_segments_received (XdpDbusImplVision *impl,
     return;
 
   vision_emit_signal_to_request (forward,
-                                 "VisionSegmentsReceived",
+                                 "VisionDetectionsReceived",
                                  g_variant_new ("(oo@a(sddddd)b)",
                                                 forward->request_handle,
                                                 forward->session_handle,
-                                                g_variant_ref (segments),
+                                                g_variant_ref (detections),
+                                                done));
+
+  if (done)
+    vision_signal_forward_mark_terminal (forward);
+}
+
+static void
+forward_vision_masks_received (XdpDbusImplVision *impl,
+                               const char        *request_id,
+                               const char        *session_id,
+                               GVariant          *masks,
+                               gboolean           done,
+                               gpointer           user_data)
+{
+  VisionSignalForward *forward = user_data;
+
+  if (g_strcmp0 (request_id, forward->request_handle) != 0 ||
+      g_strcmp0 (session_id, forward->session_handle) != 0)
+    return;
+
+  vision_emit_signal_to_request (forward,
+                                 "VisionMasksReceived",
+                                 g_variant_new ("(oo@a(sdddddsii)b)",
+                                                forward->request_handle,
+                                                forward->session_handle,
+                                                g_variant_ref (masks),
+                                                done));
+
+  if (done)
+    vision_signal_forward_mark_terminal (forward);
+}
+
+static void
+forward_vision_depth_received (XdpDbusImplVision *impl,
+                               const char        *request_id,
+                               const char        *session_id,
+                               GVariant          *depth,
+                               gboolean           done,
+                               gpointer           user_data)
+{
+  VisionSignalForward *forward = user_data;
+
+  if (g_strcmp0 (request_id, forward->request_handle) != 0 ||
+      g_strcmp0 (session_id, forward->session_handle) != 0)
+    return;
+
+  vision_emit_signal_to_request (forward,
+                                 "VisionDepthReceived",
+                                 g_variant_new ("(oo@(iiadd)b)",
+                                                forward->request_handle,
+                                                forward->session_handle,
+                                                g_variant_ref (depth),
                                                 done));
 
   if (done)
@@ -720,13 +780,13 @@ handle_vision_stream_ocr (XdpDbusVision       *object,
 }
 
 static gboolean
-handle_vision_stream_segment (XdpDbusVision       *object,
-                              GDBusMethodInvocation *invocation,
-                              GUnixFDList          *fd_list,
-                              const char            *arg_session_handle,
-                              GVariant              *arg_image_fd,
-                              const char            *arg_instructions,
-                              GVariant              *arg_options)
+handle_vision_stream_detect (XdpDbusVision       *object,
+                             GDBusMethodInvocation *invocation,
+                             GUnixFDList          *fd_list,
+                             const char            *arg_session_handle,
+                             GVariant              *arg_image_fd,
+                             const char            *arg_instructions,
+                             GVariant              *arg_options)
 {
   Vision *vision = (Vision *) object;
   g_autoptr(XdpSession) session = NULL;
@@ -745,8 +805,8 @@ handle_vision_stream_segment (XdpDbusVision       *object,
 
   if (!model_session_ensure_exact_use_case (invocation,
                                             MODEL_SESSION (session),
-                                            "vision.segment",
-                                            "StreamSegment"))
+                                            "vision.detect",
+                                            "StreamDetect"))
     return G_DBUS_METHOD_INVOCATION_HANDLED;
 
   options = model_request_options_from_vardict (arg_options, &error);
@@ -790,24 +850,137 @@ handle_vision_stream_segment (XdpDbusVision       *object,
     }
 
   forward = vision_signal_forward_new (vision,
-                                      vision->impl,
-                                      request,
-                                      session->id,
-                                      VISION_CALL_STREAM_SEGMENT);
+                                       vision->impl,
+                                       request,
+                                       session->id,
+                                       VISION_CALL_STREAM_DETECT);
   forward->sealed_media = g_object_ref (sealed_image);
   vision_signal_forward_connect_loading (forward);
   forward->handler_id = g_signal_connect (vision->impl,
-                                          "vision-segments-received",
-                                          G_CALLBACK (forward_vision_segments_received),
+                                          "vision-detections-received",
+                                          G_CALLBACK (forward_vision_detections_received),
+                                          forward);
+
+  xdp_dbus_impl_vision_call_stream_detect (vision->impl,
+                                           xdp_request_get_object_path (request),
+                                           session->id,
+                                           sealed_image_fd,
+                                           arg_instructions,
+                                           options,
+                                           sealed_fd_list,
+                                           NULL,
+                                           finish_vision_call,
+                                           forward);
+  xdp_dbus_vision_complete_stream_detect (object,
+                                          invocation,
+                                          NULL,
+                                          xdp_request_get_object_path (request));
+  return G_DBUS_METHOD_INVOCATION_HANDLED;
+}
+
+static gboolean
+handle_vision_stream_segment (XdpDbusVision       *object,
+                              GDBusMethodInvocation *invocation,
+                              GUnixFDList          *fd_list,
+                              const char            *arg_session_handle,
+                              GVariant              *arg_image_fd,
+                              const char            *arg_instructions,
+                              GVariant              *arg_options)
+{
+  Vision *vision = (Vision *) object;
+  g_autoptr(XdpSession) session = NULL;
+  ModelSession *model_session;
+  XdpRequest *request = xdp_request_from_invocation (invocation);
+  VisionSignalForward *forward;
+  g_autoptr(XdpSealedFd) sealed_image = NULL;
+  g_autoptr(GUnixFDList) sealed_fd_list = NULL;
+  g_autoptr(GVariant) sealed_image_fd = NULL;
+  const char *execution_mode = "interactive";
+  g_autoptr(GVariant) point_prompts = NULL;
+  g_autoptr(GVariant) box_prompts = NULL;
+  g_autoptr(GVariant) options = NULL;
+  g_autoptr(GError) error = NULL;
+
+  session = lookup_model_session (invocation, arg_session_handle, MODEL_SESSION_VISION);
+  if (session == NULL)
+    return G_DBUS_METHOD_INVOCATION_HANDLED;
+
+  if (!model_session_ensure_exact_use_case (invocation,
+                                            MODEL_SESSION (session),
+                                            "vision.segment",
+                                            "StreamSegment"))
+    return G_DBUS_METHOD_INVOCATION_HANDLED;
+
+  g_variant_lookup (arg_options, "execution_mode", "&s", &execution_mode);
+  point_prompts = g_variant_lookup_value (arg_options,
+                                          "point_prompts",
+                                          G_VARIANT_TYPE ("a(ddb)"));
+  if (point_prompts == NULL)
+    point_prompts = g_variant_new_array (G_VARIANT_TYPE ("(ddb)"), NULL, 0);
+
+  box_prompts = g_variant_lookup_value (arg_options,
+                                        "box_prompts",
+                                        G_VARIANT_TYPE ("a(dddd)"));
+  if (box_prompts == NULL)
+    box_prompts = g_variant_new_array (G_VARIANT_TYPE ("(dddd)"), NULL, 0);
+
+  options = g_variant_new ("(s@a(ddb)@a(dddd))",
+                           execution_mode,
+                           g_steal_pointer (&point_prompts),
+                           g_steal_pointer (&box_prompts));
+
+  sealed_image = xdp_sealed_fd_new_from_handle (arg_image_fd, fd_list, &error);
+  if (sealed_image == NULL)
+    {
+      g_dbus_method_invocation_return_error (invocation,
+                                             XDG_DESKTOP_PORTAL_ERROR,
+                                             XDG_DESKTOP_PORTAL_ERROR_INVALID_ARGUMENT,
+                                             "Invalid file descriptor: The file descriptor needs to be sealable");
+      return G_DBUS_METHOD_INVOCATION_HANDLED;
+    }
+
+  sealed_fd_list = g_unix_fd_list_new ();
+  sealed_image_fd = model_sealed_fd_to_handle (sealed_image, sealed_fd_list, &error);
+  if (sealed_image_fd == NULL)
+    {
+      g_dbus_method_invocation_return_gerror (invocation, error);
+      return G_DBUS_METHOD_INVOCATION_HANDLED;
+    }
+
+  REQUEST_AUTOLOCK (request);
+  SESSION_AUTOLOCK (session);
+  model_session = MODEL_SESSION (session);
+  if (!model_session_ensure_open (invocation, model_session))
+    return G_DBUS_METHOD_INVOCATION_HANDLED;
+
+  if (!model_request_export_with_impl (request,
+                                       g_dbus_method_invocation_get_connection (invocation),
+                                       G_DBUS_PROXY (vision->impl),
+                                       &error))
+    {
+      g_dbus_method_invocation_return_gerror (invocation, error);
+      return G_DBUS_METHOD_INVOCATION_HANDLED;
+    }
+
+  forward = vision_signal_forward_new (vision,
+                                       vision->impl,
+                                       request,
+                                       session->id,
+                                       VISION_CALL_STREAM_SEGMENT);
+  forward->sealed_media = g_object_ref (sealed_image);
+  vision_signal_forward_connect_loading (forward);
+  forward->handler_id = g_signal_connect (vision->impl,
+                                          "vision-masks-received",
+                                          G_CALLBACK (forward_vision_masks_received),
                                           forward);
 
   xdp_dbus_impl_vision_call_stream_segment (vision->impl,
                                             xdp_request_get_object_path (request),
-                                         session->id,
-                                         sealed_image_fd,
-                                         arg_instructions,
-                                         options,
-                                         sealed_fd_list,
+                                            session->id,
+                                            sealed_image_fd,
+                                            arg_instructions,
+                                            options,
+                                            sealed_fd_list,
                                             NULL,
                                             finish_vision_call,
                                             forward);
@@ -815,6 +988,105 @@ handle_vision_stream_segment (XdpDbusVision       *object,
                                            invocation,
                                            NULL,
                                            xdp_request_get_object_path (request));
+  return G_DBUS_METHOD_INVOCATION_HANDLED;
+}
+
+static gboolean
+handle_vision_stream_depth (XdpDbusVision       *object,
+                            GDBusMethodInvocation *invocation,
+                            GUnixFDList          *fd_list,
+                            const char            *arg_session_handle,
+                            GVariant              *arg_image_fd,
+                            const char            *arg_instructions,
+                            GVariant              *arg_options)
+{
+  Vision *vision = (Vision *) object;
+  g_autoptr(XdpSession) session = NULL;
+  ModelSession *model_session;
+  XdpRequest *request = xdp_request_from_invocation (invocation);
+  VisionSignalForward *forward;
+  g_autoptr(XdpSealedFd) sealed_image = NULL;
+  g_autoptr(GUnixFDList) sealed_fd_list = NULL;
+  g_autoptr(GVariant) sealed_image_fd = NULL;
+  g_autoptr(GVariant) options = NULL;
+  g_autoptr(GError) error = NULL;
+
+  session = lookup_model_session (invocation, arg_session_handle, MODEL_SESSION_VISION);
+  if (session == NULL)
+    return G_DBUS_METHOD_INVOCATION_HANDLED;
+
+  if (!model_session_ensure_exact_use_case (invocation,
+                                            MODEL_SESSION (session),
+                                            "vision.depth",
+                                            "StreamDepth"))
+    return G_DBUS_METHOD_INVOCATION_HANDLED;
+
+  options = model_request_options_from_vardict (arg_options, &error);
+  if (options == NULL)
+    {
+      g_dbus_method_invocation_return_gerror (invocation, error);
+      return G_DBUS_METHOD_INVOCATION_HANDLED;
+    }
+
+  sealed_image = xdp_sealed_fd_new_from_handle (arg_image_fd, fd_list, &error);
+  if (sealed_image == NULL)
+    {
+      g_dbus_method_invocation_return_error (invocation,
+                                             XDG_DESKTOP_PORTAL_ERROR,
+                                             XDG_DESKTOP_PORTAL_ERROR_INVALID_ARGUMENT,
+                                             "Invalid file descriptor: The file descriptor needs to be sealable");
+      return G_DBUS_METHOD_INVOCATION_HANDLED;
+    }
+
+  sealed_fd_list = g_unix_fd_list_new ();
+  sealed_image_fd = model_sealed_fd_to_handle (sealed_image, sealed_fd_list, &error);
+  if (sealed_image_fd == NULL)
+    {
+      g_dbus_method_invocation_return_gerror (invocation, error);
+      return G_DBUS_METHOD_INVOCATION_HANDLED;
+    }
+
+  REQUEST_AUTOLOCK (request);
+  SESSION_AUTOLOCK (session);
+  model_session = MODEL_SESSION (session);
+  if (!model_session_ensure_open (invocation, model_session))
+    return G_DBUS_METHOD_INVOCATION_HANDLED;
+
+  if (!model_request_export_with_impl (request,
+                                       g_dbus_method_invocation_get_connection (invocation),
+                                       G_DBUS_PROXY (vision->impl),
+                                       &error))
+    {
+      g_dbus_method_invocation_return_gerror (invocation, error);
+      return G_DBUS_METHOD_INVOCATION_HANDLED;
+    }
+
+  forward = vision_signal_forward_new (vision,
+                                       vision->impl,
+                                       request,
+                                       session->id,
+                                       VISION_CALL_STREAM_DEPTH);
+  forward->sealed_media = g_object_ref (sealed_image);
+  vision_signal_forward_connect_loading (forward);
+  forward->handler_id = g_signal_connect (vision->impl,
+                                          "vision-depth-received",
+                                          G_CALLBACK (forward_vision_depth_received),
+                                          forward);
+
+  xdp_dbus_impl_vision_call_stream_depth (vision->impl,
+                                          xdp_request_get_object_path (request),
+                                          session->id,
+                                          sealed_image_fd,
+                                          arg_instructions,
+                                          options,
+                                          sealed_fd_list,
+                                          NULL,
+                                          finish_vision_call,
+                                          forward);
+  xdp_dbus_vision_complete_stream_depth (object,
+                                         invocation,
+                                         NULL,
+                                         xdp_request_get_object_path (request));
   return G_DBUS_METHOD_INVOCATION_HANDLED;
 }
 
@@ -826,7 +1098,9 @@ vision_iface_init (XdpDbusVisionIface *iface)
   iface->handle_prewarm = handle_vision_prewarm;
   iface->handle_stream_describe = handle_vision_stream_describe;
   iface->handle_stream_ocr = handle_vision_stream_ocr;
+  iface->handle_stream_detect = handle_vision_stream_detect;
   iface->handle_stream_segment = handle_vision_stream_segment;
+  iface->handle_stream_depth = handle_vision_stream_depth;
 }
 
 static void

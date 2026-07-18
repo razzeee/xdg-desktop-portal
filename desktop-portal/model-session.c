@@ -196,7 +196,9 @@ model_use_case_is_supported (ModelSessionKind  kind,
     case MODEL_SESSION_VISION:
       return g_strcmp0 (use_case, "vision.describe") == 0 ||
              g_strcmp0 (use_case, "vision.ocr") == 0 ||
-             g_strcmp0 (use_case, "vision.segment") == 0;
+             g_strcmp0 (use_case, "vision.detect") == 0 ||
+             g_strcmp0 (use_case, "vision.segment") == 0 ||
+             g_strcmp0 (use_case, "vision.depth") == 0;
     }
 
   g_assert_not_reached ();

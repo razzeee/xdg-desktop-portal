@@ -9,8 +9,8 @@
       org.freedesktop.portal.Vision:
       @short_description: Portal for local vision model tasks
 
-      Supported use-cases are ``vision.describe``, ``vision.ocr``, and
-      ``vision.segment``.
+      Supported use-cases are ``vision.describe``, ``vision.ocr``,
+      ``vision.detect``, ``vision.segment``, and ``vision.depth``.
 
       Methods returning request handles accept the standard ``handle_token``
       option. ``handle_token`` is a caller-chosen object-path token used to
@@ -31,7 +31,7 @@
   <interface name="org.freedesktop.portal.Vision">
     <!--
         GetUseCaseAvailability:
-        @use_case: ``vision.describe``, ``vision.ocr``, or ``vision.segment``
+        @use_case: One of the supported ``vision.*`` task tokens
         @options: Reserved vardict; no keys are currently defined
         @availability: Struct containing is_available, a stable availability status code, and human-readable reason
 
@@ -131,21 +131,59 @@
     </method>
 
     <!--
-        StreamSegment:
-        @session_handle: A ``vision.segment`` session handle returned by CreateSession
+        StreamDetect:
+        @session_handle: A ``vision.detect`` session handle returned by CreateSession
         @image_fd: Readable, sealable memfd containing PNG or JPEG image bytes.
         @instructions: Optional per-image instructions for this request.
         @options: Vardict with optional ``handle_token`` and ``execution_mode`` strings
         @handle: Object path for the :ref:`org.freedesktop.portal.Request` object representing this call
 
-        The method returns a Request handle immediately. Detected objects are
-        emitted as VisionSegmentsReceived signals; completion, cancellation, and
-        failures are reported through the :ref:`org.freedesktop.portal.Request::Response` signal.
+        Detected objects are emitted as VisionDetectionsReceived signals.
+    -->
+    <method name="StreamDetect">
+      <annotation name="org.gtk.GDBus.C.UnixFD" value="true"/>
+      <arg type="o" name="session_handle" direction="in"/>
+      <arg type="h" name="image_fd" direction="in"/>
+      <arg type="s" name="instructions" direction="in"/>
+      <annotation name="org.qtproject.QtDBus.QtTypeName.In3" value="QVariantMap"/>
+      <arg type="a{sv}" name="options" direction="in"/>
+      <arg type="o" name="handle" direction="out"/>
+    </method>
 
-        Segment coordinates are normalized rectangles in the ``0.0..1.0``
-        range relative to the image dimensions.
+    <!--
+        StreamSegment:
+        @session_handle: A ``vision.segment`` session handle returned by CreateSession
+        @image_fd: Readable, sealable memfd containing PNG or JPEG image bytes.
+        @instructions: Optional per-image instructions for this request.
+        @options: Vardict with optional ``handle_token``, ``execution_mode``,
+          ``point_prompts`` (``a(ddb)``), and ``box_prompts`` (``a(dddd)``)
+        @handle: Object path for the :ref:`org.freedesktop.portal.Request` object representing this call
+
+        The method returns a Request handle immediately. Masks are emitted as
+        VisionMasksReceived signals; completion, cancellation, and
+        failures are reported through the :ref:`org.freedesktop.portal.Request::Response` signal.
     -->
     <method name="StreamSegment">
+      <annotation name="org.gtk.GDBus.C.UnixFD" value="true"/>
+      <arg type="o" name="session_handle" direction="in"/>
+      <arg type="h" name="image_fd" direction="in"/>
+      <arg type="s" name="instructions" direction="in"/>
+      <annotation name="org.qtproject.QtDBus.QtTypeName.In3" value="QVariantMap"/>
+      <arg type="a{sv}" name="options" direction="in"/>
+      <arg type="o" name="handle" direction="out"/>
+    </method>
+
+    <!--
+        StreamDepth:
+        @session_handle: A ``vision.depth`` session handle returned by CreateSession
+        @image_fd: Readable, sealable memfd containing PNG or JPEG image bytes.
+        @instructions: Optional per-image instructions for this request.
+        @options: Vardict with optional ``handle_token`` and ``execution_mode`` strings
+        @handle: Object path for the :ref:`org.freedesktop.portal.Request` object representing this call
+
+        Depth maps are emitted as VisionDepthReceived signals.
+    -->
+    <method name="StreamDepth">
       <annotation name="org.gtk.GDBus.C.UnixFD" value="true"/>
       <arg type="o" name="session_handle" direction="in"/>
       <arg type="h" name="image_fd" direction="in"/>
@@ -168,11 +206,25 @@
       <arg type="b" name="done"/>
     </signal>
 
-    <signal name="VisionSegmentsReceived">
+    <signal name="VisionDetectionsReceived">
       <arg type="o" name="request_handle"/>
       <arg type="o" name="session_handle"/>
       <annotation name="org.qtproject.QtDBus.QtTypeName.Out2" value="QList&lt;std::tuple&lt;QString,double,double,double,double,double&gt;&gt;"/>
-      <arg type="a(sddddd)" name="segments"/>
+      <arg type="a(sddddd)" name="detections"/>
+      <arg type="b" name="done"/>
+    </signal>
+
+    <signal name="VisionMasksReceived">
+      <arg type="o" name="request_handle"/>
+      <arg type="o" name="session_handle"/>
+      <arg type="a(sdddddsii)" name="masks"/>
+      <arg type="b" name="done"/>
+    </signal>
+
+    <signal name="VisionDepthReceived">
+      <arg type="o" name="request_handle"/>
+      <arg type="o" name="session_handle"/>
+      <arg type="(iiadd)" name="depth"/>
       <arg type="b" name="done"/>
     </signal>
 

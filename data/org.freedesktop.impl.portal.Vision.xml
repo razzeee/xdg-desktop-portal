@@ -13,7 +13,7 @@
     <!--
         GetUseCaseAvailability:
         @app_id: Application ID of the caller
-        @use_case: ``vision.describe``, ``vision.ocr``, or ``vision.segment``
+        @use_case: One of the supported ``vision.*`` task tokens
         @availability: Struct containing is_available, a stable availability status code, and human-readable reason
 
         Returns whether a local profile is assigned and runnable for @use_case.
@@ -30,7 +30,7 @@
         @session_handle: Session handle allocated by the frontend
         @app_id: Application ID of the caller
         @parent_window: Identifier for the application window, see :doc:`window-identifiers`
-        @use_case: ``vision.describe`` for image descriptions, ``vision.ocr`` for text extraction, or ``vision.segment`` for object boxes
+        @use_case: Supported vision task token
         @instructions: Stable system instructions for this session
 
         The session @use_case selects which vision operation is permitted for
@@ -99,19 +99,54 @@
     </method>
 
     <!--
+        StreamDetect:
+        @handle: Request handle owned by the frontend
+        @session_handle: A ``vision.detect`` session handle returned by CreateSession
+        @image_fd: Readable, sealable memfd containing PNG or JPEG image bytes.
+        @instructions: Optional per-image instructions for this request.
+        @options: Vision options struct
+
+        Detected objects are emitted as VisionDetectionsReceived signals.
+    -->
+    <method name="StreamDetect">
+      <annotation name="org.gtk.GDBus.C.UnixFD" value="true"/>
+      <arg type="o" name="handle" direction="in"/>
+      <arg type="o" name="session_handle" direction="in"/>
+      <arg type="h" name="image_fd" direction="in"/>
+      <arg type="s" name="instructions" direction="in"/>
+      <arg type="(s)" name="options" direction="in"/>
+    </method>
+
+    <!--
         StreamSegment:
         @handle: Request handle owned by the frontend
         @session_handle: A ``vision.segment`` session handle returned by CreateSession
         @image_fd: Readable, sealable memfd containing PNG or JPEG image bytes.
         @instructions: Optional per-image instructions for this request.
-        @options: Vision options struct
+        @options: Vision segmentation options struct
 
-        Detected objects are emitted as VisionSegmentsReceived signals.
-
-        Segment coordinates are normalized rectangles in the ``0.0..1.0``
-        range relative to the image dimensions.
+        Masks are emitted as VisionMasksReceived signals.
     -->
     <method name="StreamSegment">
+      <annotation name="org.gtk.GDBus.C.UnixFD" value="true"/>
+      <arg type="o" name="handle" direction="in"/>
+      <arg type="o" name="session_handle" direction="in"/>
+      <arg type="h" name="image_fd" direction="in"/>
+      <arg type="s" name="instructions" direction="in"/>
+      <arg type="(sa(ddb)a(dddd))" name="options" direction="in"/>
+    </method>
+
+    <!--
+        StreamDepth:
+        @handle: Request handle owned by the frontend
+        @session_handle: A ``vision.depth`` session handle returned by CreateSession
+        @image_fd: Readable, sealable memfd containing PNG or JPEG image bytes.
+        @instructions: Optional per-image instructions for this request.
+        @options: Vision options struct
+
+        Depth maps are emitted as VisionDepthReceived signals.
+    -->
+    <method name="StreamDepth">
       <annotation name="org.gtk.GDBus.C.UnixFD" value="true"/>
       <arg type="o" name="handle" direction="in"/>
       <arg type="o" name="session_handle" direction="in"/>
@@ -133,11 +168,25 @@
       <arg type="b" name="done"/>
     </signal>
 
-    <signal name="VisionSegmentsReceived">
+    <signal name="VisionDetectionsReceived">
       <arg type="o" name="handle"/>
       <arg type="o" name="session_handle"/>
       <annotation name="org.qtproject.QtDBus.QtTypeName.Out2" value="QList&lt;std::tuple&lt;QString,double,double,double,double,double&gt;&gt;"/>
-      <arg type="a(sddddd)" name="segments"/>
+      <arg type="a(sddddd)" name="detections"/>
+      <arg type="b" name="done"/>
+    </signal>
+
+    <signal name="VisionMasksReceived">
+      <arg type="o" name="handle"/>
+      <arg type="o" name="session_handle"/>
+      <arg type="a(sdddddsii)" name="masks"/>
+      <arg type="b" name="done"/>
+    </signal>
+
+    <signal name="VisionDepthReceived">
+      <arg type="o" name="handle"/>
+      <arg type="o" name="session_handle"/>
+      <arg type="(iiadd)" name="depth"/>
       <arg type="b" name="done"/>
     </signal>
 
