@@ -224,7 +224,7 @@
     <signal name="VisionDepthReceived">
       <arg type="o" name="request_handle"/>
       <arg type="o" name="session_handle"/>
-      <arg type="(iiadd)" name="depth"/>
+      <arg type="(iiaddd)" name="depth"/>
       <arg type="b" name="done"/>
     </signal>
 

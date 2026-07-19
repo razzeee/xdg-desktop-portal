@@ -369,11 +369,11 @@ forward_vision_depth_received (XdpDbusImplVision *impl,
 
   vision_emit_signal_to_request (forward,
                                  "VisionDepthReceived",
-                                 g_variant_new ("(oo@(iiadd)b)",
-                                                forward->request_handle,
-                                                forward->session_handle,
-                                                g_variant_ref (depth),
-                                                done));
+                                  g_variant_new ("(oo@(iiaddd)b)",
+                                                 forward->request_handle,
+                                                 forward->session_handle,
+                                                 g_variant_ref (depth),
+                                                 done));
 
   if (done)
     vision_signal_forward_mark_terminal (forward);
