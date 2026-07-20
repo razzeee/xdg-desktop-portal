@@ -50,8 +50,10 @@
         @handle: Request handle owned by the frontend
         @session_handle: Speech session handle returned by CreateSession
 
-        Optionally starts the backing runtime before the first user-visible operation.
-        First inference starts the runtime on demand if Prewarm is skipped.
+        Optionally starts the container for the session's assigned profile before
+        the first user-visible operation. First inference starts the runtime on
+        demand if Prewarm is skipped. Prewarm does not prepare a specific stream
+        method or request payload.
     -->
     <method name="Prewarm">
       <arg type="o" name="handle" direction="in"/>

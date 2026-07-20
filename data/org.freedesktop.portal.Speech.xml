@@ -73,10 +73,11 @@
         @options: Vardict with optional ``handle_token`` string
         @handle: Object path for the :ref:`org.freedesktop.portal.Request` object representing this call
 
-        Optionally starts the backing runtime before the first user-visible
-        operation. First inference starts the runtime on demand if Prewarm is
-        skipped. Completion, cancellation, and failures are reported through the
-        :ref:`org.freedesktop.portal.Request::Response` signal.
+        Optionally starts the container for the session's assigned profile
+        before the first user-visible operation. First inference starts the
+        runtime on demand if Prewarm is skipped. Prewarm does not prepare a
+        specific stream method or request payload. Completion, cancellation, and
+        failures are reported through the :ref:`org.freedesktop.portal.Request::Response` signal.
     -->
     <method name="Prewarm">
       <arg type="o" name="session_handle" direction="in"/>
