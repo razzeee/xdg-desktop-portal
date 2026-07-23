@@ -8,6 +8,7 @@ from tests.templates.xdp_utils import Response, init_logger, ImplRequest, ImplSe
 
 import dbus.service
 from dataclasses import dataclass
+from gi.repository import GLib
 
 
 BUS_NAME = "org.freedesktop.impl.portal.Test"
@@ -23,6 +24,7 @@ logger = init_logger(__name__)
 class SpeechParameters:
     delay: int
     session_id: str
+    audio_chunks: tuple[bytes, ...]
 
 
 def load(mock, parameters={}):
@@ -32,6 +34,7 @@ def load(mock, parameters={}):
     mock.speech_params = SpeechParameters(
         delay=parameters.get("delay", 200),
         session_id=parameters.get("session-id", "speech-session-1"),
+        audio_chunks=(b"\x01\x00\x02\x00", b"\x03\x00\x04\x00"),
     )
     mock.speech_sessions = {}
 
@@ -75,3 +78,57 @@ def CreateSession(
         cb_error,
     )
     request.respond(Response(0, {}), delay=params.delay)
+
+
+@dbus.service.method(
+    MAIN_IFACE,
+    in_signature="oos(sss)",
+    out_signature="",
+    async_callbacks=("cb_success", "cb_error"),
+)
+def StreamSynthesize(
+    self,
+    request_id,
+    session_handle,
+    text,
+    options,
+    cb_success,
+    cb_error,
+):
+    logger.debug(
+        f"StreamSynthesize({request_id}, {session_handle}, {text}, {options})"
+    )
+    params = self.speech_params
+    request = ImplRequest(
+        self,
+        BUS_NAME,
+        request_id,
+        logger,
+        lambda response, results: cb_success(),
+        cb_error,
+    )
+    chunks = (*params.audio_chunks, b"")
+
+    def emit_chunk(index=0):
+        done = index == len(chunks) - 1
+        self.EmitSignal(
+            MAIN_IFACE,
+            "AudioReceived",
+            "ooayuusb",
+            [
+                request_id,
+                session_handle,
+                dbus.ByteArray(chunks[index]),
+                dbus.UInt32(24000),
+                dbus.UInt32(1),
+                "s16le",
+                done,
+            ],
+        )
+        if done:
+            request.respond(Response(0, {}), delay=0)
+        else:
+            GLib.timeout_add(params.delay, emit_chunk, index + 1)
+        return GLib.SOURCE_REMOVE
+
+    GLib.idle_add(emit_chunk)

@@ -63,6 +63,7 @@ typedef enum
 {
   SPEECH_CALL_PREWARM,
   SPEECH_CALL_STREAM_TRANSCRIBE,
+  SPEECH_CALL_STREAM_SYNTHESIZE,
 } SpeechCallKind;
 
 typedef struct _SpeechCreateSession
@@ -233,6 +234,9 @@ finish_speech_call (GObject      *source,
     case SPEECH_CALL_STREAM_TRANSCRIBE:
       ok = xdp_dbus_impl_speech_call_stream_transcribe_finish (impl, NULL, result, &error);
       break;
+    case SPEECH_CALL_STREAM_SYNTHESIZE:
+      ok = xdp_dbus_impl_speech_call_stream_synthesize_finish (impl, result, &error);
+      break;
     }
 
   if (!ok)
@@ -279,6 +283,38 @@ forward_transcription_received (XdpDbusImplSpeech *impl,
                                                 forward->request_handle,
                                                 forward->session_handle,
                                                 text,
+                                                done));
+
+  if (done)
+    speech_signal_forward_mark_terminal (forward);
+}
+
+static void
+forward_audio_received (XdpDbusImplSpeech *impl,
+                        const char        *request_id,
+                        const char        *session_id,
+                        GVariant          *audio,
+                        guint              sample_rate,
+                        guint              channels,
+                        const char        *sample_format,
+                        gboolean           done,
+                        gpointer           user_data)
+{
+  SpeechSignalForward *forward = user_data;
+
+  if (g_strcmp0 (request_id, forward->request_handle) != 0 ||
+      g_strcmp0 (session_id, forward->session_handle) != 0)
+    return;
+
+  speech_emit_signal_to_request (forward,
+                                 "AudioReceived",
+                                 g_variant_new ("(oo@ayuusb)",
+                                                forward->request_handle,
+                                                forward->session_handle,
+                                                g_variant_ref (audio),
+                                                sample_rate,
+                                                channels,
+                                                sample_format,
                                                 done));
 
   if (done)
@@ -583,6 +619,87 @@ handle_speech_stream_transcribe (XdpDbusSpeech       *object,
   return G_DBUS_METHOD_INVOCATION_HANDLED;
 }
 
+static gboolean
+handle_speech_stream_synthesize (XdpDbusSpeech         *object,
+                                 GDBusMethodInvocation *invocation,
+                                 const char            *arg_session_handle,
+                                 const char            *arg_text,
+                                 GVariant              *arg_options)
+{
+  Speech *speech = (Speech *) object;
+  g_autoptr(XdpSession) session = NULL;
+  ModelSession *model_session;
+  XdpRequest *request = xdp_request_from_invocation (invocation);
+  SpeechSignalForward *forward;
+  g_autoptr(GVariant) options = NULL;
+  g_autoptr(GError) error = NULL;
+
+  session = lookup_model_session (invocation, arg_session_handle, MODEL_SESSION_SPEECH);
+  if (session == NULL)
+    return G_DBUS_METHOD_INVOCATION_HANDLED;
+
+  if (!model_session_ensure_exact_use_case (invocation,
+                                             MODEL_SESSION (session),
+                                             "speech.synthesize",
+                                             "StreamSynthesize"))
+    return G_DBUS_METHOD_INVOCATION_HANDLED;
+
+  if (arg_text[0] == '\0')
+    {
+      g_dbus_method_invocation_return_error (invocation,
+                                             XDG_DESKTOP_PORTAL_ERROR,
+                                             XDG_DESKTOP_PORTAL_ERROR_INVALID_ARGUMENT,
+                                             "aileron.Inference.InvalidInput: synthesis text must not be empty");
+      return G_DBUS_METHOD_INVOCATION_HANDLED;
+    }
+
+  options = model_synthesis_options_from_vardict (arg_options, &error);
+  if (options == NULL)
+    {
+      g_dbus_method_invocation_return_gerror (invocation, error);
+      return G_DBUS_METHOD_INVOCATION_HANDLED;
+    }
+
+  REQUEST_AUTOLOCK (request);
+  SESSION_AUTOLOCK (session);
+  model_session = MODEL_SESSION (session);
+  if (!model_session_ensure_open (invocation, model_session))
+    return G_DBUS_METHOD_INVOCATION_HANDLED;
+
+  if (!model_request_export_with_impl (request,
+                                       g_dbus_method_invocation_get_connection (invocation),
+                                       G_DBUS_PROXY (speech->impl),
+                                       &error))
+    {
+      g_dbus_method_invocation_return_gerror (invocation, error);
+      return G_DBUS_METHOD_INVOCATION_HANDLED;
+    }
+
+  forward = speech_signal_forward_new (speech,
+                                       speech->impl,
+                                       request,
+                                       session->id,
+                                       SPEECH_CALL_STREAM_SYNTHESIZE);
+  speech_signal_forward_connect_loading (forward);
+  forward->handler_id = g_signal_connect (speech->impl,
+                                          "audio-received",
+                                          G_CALLBACK (forward_audio_received),
+                                          forward);
+
+  xdp_dbus_impl_speech_call_stream_synthesize (speech->impl,
+                                                xdp_request_get_object_path (request),
+                                                session->id,
+                                                arg_text,
+                                                options,
+                                                NULL,
+                                                finish_speech_call,
+                                                forward);
+  xdp_dbus_speech_complete_stream_synthesize (object,
+                                               invocation,
+                                               xdp_request_get_object_path (request));
+  return G_DBUS_METHOD_INVOCATION_HANDLED;
+}
+
 static void
 speech_iface_init (XdpDbusSpeechIface *iface)
 {
@@ -590,6 +707,7 @@ speech_iface_init (XdpDbusSpeechIface *iface)
   iface->handle_create_session = handle_speech_create_session;
   iface->handle_prewarm = handle_speech_prewarm;
   iface->handle_stream_transcribe = handle_speech_stream_transcribe;
+  iface->handle_stream_synthesize = handle_speech_stream_synthesize;
 }
 
 static void
@@ -624,7 +742,7 @@ speech_new (XdpContext        *context,
   speech->context = context;
   speech->impl = g_object_ref (impl);
   g_dbus_proxy_set_default_timeout (G_DBUS_PROXY (speech->impl), G_MAXINT);
-  xdp_dbus_speech_set_version (XDP_DBUS_SPEECH (speech), 1);
+  xdp_dbus_speech_set_version (XDP_DBUS_SPEECH (speech), 2);
 
   return speech;
 }

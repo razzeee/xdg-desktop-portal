@@ -67,6 +67,13 @@ static XdpOptionKey speech_options[] = {
   { "execution_mode", G_VARIANT_TYPE_STRING, NULL },
 };
 
+static XdpOptionKey synthesis_options[] = {
+  { "handle_token", G_VARIANT_TYPE_STRING, NULL },
+  { "voice_id", G_VARIANT_TYPE_STRING, NULL },
+  { "language_hint", G_VARIANT_TYPE_STRING, NULL },
+  { "execution_mode", G_VARIANT_TYPE_STRING, NULL },
+};
+
 static void
 model_session_close (XdpSession *session)
 {
@@ -192,7 +199,8 @@ model_use_case_is_supported (ModelSessionKind  kind,
              g_strcmp0 (use_case, "language.embed") == 0;
     case MODEL_SESSION_SPEECH:
       return g_strcmp0 (use_case, "speech.transcribe") == 0 ||
-             g_strcmp0 (use_case, "speech.translate") == 0;
+             g_strcmp0 (use_case, "speech.translate") == 0 ||
+             g_strcmp0 (use_case, "speech.synthesize") == 0;
     case MODEL_SESSION_VISION:
       return g_strcmp0 (use_case, "vision.describe") == 0 ||
              g_strcmp0 (use_case, "vision.ocr") == 0 ||
@@ -398,6 +406,43 @@ model_speech_options_from_vardict (GVariant  *arg_options,
                                      G_N_ELEMENTS (speech_options),
                                      "speech",
                                      error);
+}
+
+GVariant *
+model_synthesis_options_from_vardict (GVariant  *arg_options,
+                                      GError   **error)
+{
+  g_auto(GVariantBuilder) options_builder =
+    G_VARIANT_BUILDER_INIT (G_VARIANT_TYPE_VARDICT);
+  g_autoptr(GVariant) options = NULL;
+  const char *voice_id = "";
+  const char *language_hint = "";
+  const char *execution_mode = "interactive";
+
+  if (!xdp_filter_options (arg_options, &options_builder,
+                           synthesis_options, G_N_ELEMENTS (synthesis_options),
+                           NULL, error))
+    return NULL;
+
+  options = g_variant_ref_sink (g_variant_builder_end (&options_builder));
+  g_variant_lookup (options, "voice_id", "&s", &voice_id);
+  g_variant_lookup (options, "language_hint", "&s", &language_hint);
+  g_variant_lookup (options, "execution_mode", "&s", &execution_mode);
+  if (g_strcmp0 (execution_mode, "interactive") != 0 &&
+      g_strcmp0 (execution_mode, "background") != 0)
+    {
+      g_set_error (error,
+                   XDG_DESKTOP_PORTAL_ERROR,
+                   XDG_DESKTOP_PORTAL_ERROR_INVALID_ARGUMENT,
+                   "aileron.Inference.InvalidInput: unsupported execution mode %s",
+                   execution_mode);
+      return NULL;
+    }
+
+  return g_variant_ref_sink (g_variant_new ("(sss)",
+                                             voice_id,
+                                             language_hint,
+                                             execution_mode));
 }
 
 gboolean

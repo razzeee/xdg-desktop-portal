@@ -78,6 +78,9 @@ GVariant *model_request_options_from_vardict (GVariant  *arg_options,
 GVariant *model_speech_options_from_vardict (GVariant  *arg_options,
                                              GError   **error);
 
+GVariant *model_synthesis_options_from_vardict (GVariant  *arg_options,
+                                                 GError   **error);
+
 gboolean model_session_options_validate (GVariant  *options,
                                          GError   **error);
 

@@ -5,6 +5,7 @@
 
 import tests.xdp_utils as xdp
 
+import dbus
 import pytest
 
 
@@ -18,6 +19,18 @@ def required_templates():
 
 
 class TestModelPortals:
+    def create_speech_session(self, dbus_con, use_case):
+        speech_intf = xdp.get_portal_iface(dbus_con, "Speech")
+        response = xdp.Request(dbus_con, speech_intf).call(
+            "CreateSession",
+            parent_window="",
+            use_case=use_case,
+            instructions="",
+            options={},
+        )
+        assert response and response.response == 0
+        return speech_intf, response.results["session_handle"]
+
     @pytest.mark.parametrize(
         "portal,use_case,instructions",
         [
@@ -54,6 +67,95 @@ class TestModelPortals:
         assert args[3] == ""
         assert args[4] == use_case
         assert args[5] == instructions
+
+    def test_speech_version_is_two(self, portals, dbus_con):
+        xdp.check_version(dbus_con, "Speech", 2)
+
+    def test_stream_synthesize_forwards_options_and_terminal_audio(
+        self, portals, dbus_con
+    ):
+        speech_intf, session_handle = self.create_speech_session(
+            dbus_con, "speech.synthesize"
+        )
+        mock_intf = xdp.get_mock_iface(dbus_con)
+        received = []
+
+        def audio_received(
+            request_handle,
+            signal_session_handle,
+            audio,
+            sample_rate,
+            channels,
+            sample_format,
+            done,
+        ):
+            received.append(
+                (
+                    str(request_handle),
+                    str(signal_session_handle),
+                    bytes(audio),
+                    int(sample_rate),
+                    int(channels),
+                    str(sample_format),
+                    bool(done),
+                )
+            )
+
+        signal_match = dbus_con.add_signal_receiver(
+            audio_received,
+            "AudioReceived",
+            dbus_interface="org.freedesktop.portal.Speech",
+        )
+        request = xdp.Request(dbus_con, speech_intf)
+        try:
+            response = request.call(
+                "StreamSynthesize",
+                session_handle=session_handle,
+                text="Hello.",
+                options={
+                    "voice_id": dbus.String("default", variant_level=1),
+                    "language_hint": dbus.String("en", variant_level=1),
+                    "execution_mode": dbus.String("interactive", variant_level=1),
+                },
+            )
+        finally:
+            signal_match.remove()
+
+        assert response and response.response == 0
+        assert [chunk[2] for chunk in received] == [
+            b"\x01\x00\x02\x00",
+            b"\x03\x00\x04\x00",
+            b"",
+        ]
+        assert [chunk[6] for chunk in received] == [False, False, True]
+        assert all(chunk[0] == request.handle for chunk in received)
+        assert all(chunk[1] == str(session_handle) for chunk in received)
+        assert all(chunk[3:6] == (24000, 1, "s16le") for chunk in received)
+
+        method_calls = mock_intf.GetMethodCalls("StreamSynthesize")
+        assert len(method_calls) == 1
+        _, args = method_calls[0]
+        assert args[0] == request.handle
+        assert args[1] == session_handle
+        assert args[2] == "Hello."
+        assert tuple(args[3]) == ("default", "en", "interactive")
+
+    def test_stream_synthesize_rejects_transcription_session(
+        self, portals, dbus_con
+    ):
+        speech_intf, session_handle = self.create_speech_session(
+            dbus_con, "speech.transcribe"
+        )
+
+        with pytest.raises(Exception) as excinfo:
+            xdp.Request(dbus_con, speech_intf).call(
+                "StreamSynthesize",
+                session_handle=session_handle,
+                text="Hello.",
+                options={},
+            )
+
+        assert "requires use-case speech.synthesize" in str(excinfo.value)
 
     @pytest.mark.parametrize(
         "portal,use_case",

@@ -10,7 +10,8 @@
       @short_description: Portal for local speech model tasks
 
       Supported use-cases are ``speech.transcribe`` for verbatim source-language
-      transcription and ``speech.translate`` for speech-to-English translation.
+      transcription, ``speech.translate`` for speech-to-English translation, and
+      ``speech.synthesize`` for text-to-speech.
 
       Methods returning request handles accept the standard ``handle_token``
       option. ``handle_token`` is a caller-chosen object-path token used to
@@ -21,18 +22,19 @@
       ``session_handle_token``, a caller-chosen object-path token used to
       predict the Session path returned as ``session_handle`` in the request
       response. StreamTranscribe also accepts ``source_language_hint`` and ``execution_mode``
-      (``interactive`` or ``background``). Other option keys are reserved.
+      (``interactive`` or ``background``). StreamSynthesize accepts ``voice_id``,
+      ``language_hint``, and ``execution_mode``. Other option keys are reserved.
       Failed request responses may include ``error`` and
       ``error_name`` strings in the results vardict. Stream payload signals are
       sent only to the caller that owns the request and are correlated by
       ``request_handle``.
 
-      This documentation describes version 1 of this interface.
+      This documentation describes version 2 of this interface.
   -->
   <interface name="org.freedesktop.portal.Speech">
     <!--
         GetUseCaseAvailability:
-        @use_case: ``speech.transcribe`` or ``speech.translate``
+        @use_case: ``speech.transcribe``, ``speech.translate``, or ``speech.synthesize``
         @options: Reserved vardict; no keys are currently defined
         @availability: Struct containing is_available, a stable availability status code, and human-readable reason
 
@@ -107,6 +109,25 @@
       <arg type="o" name="handle" direction="out"/>
     </method>
 
+    <!--
+        StreamSynthesize:
+        @session_handle: A speech synthesis session handle returned by CreateSession
+        @text: Non-empty phrase to synthesize
+        @options: Vardict with optional ``handle_token``, ``voice_id``, ``language_hint``, and ``execution_mode`` strings
+        @handle: Object path for the :ref:`org.freedesktop.portal.Request` object representing this call
+
+        Starts streaming interleaved PCM audio for one phrase. The method returns
+        a Request handle immediately. Chunks are emitted as AudioReceived signals;
+        completion, cancellation, and failures are reported through the Request.
+    -->
+    <method name="StreamSynthesize">
+      <arg type="o" name="session_handle" direction="in"/>
+      <arg type="s" name="text" direction="in"/>
+      <annotation name="org.qtproject.QtDBus.QtTypeName.In2" value="QVariantMap"/>
+      <arg type="a{sv}" name="options" direction="in"/>
+      <arg type="o" name="handle" direction="out"/>
+    </method>
+
     <signal name="ModelLoading">
       <arg type="o" name="request_handle"/>
       <arg type="o" name="session_handle"/>
@@ -117,6 +138,18 @@
       <arg type="o" name="request_handle"/>
       <arg type="o" name="session_handle"/>
       <arg type="s" name="text"/>
+      <arg type="b" name="done"/>
+    </signal>
+
+    <signal name="AudioReceived">
+      <arg type="o" name="request_handle"/>
+      <arg type="o" name="session_handle"/>
+      <arg type="ay" name="audio">
+        <annotation name="org.gtk.GDBus.C.ForceGVariant" value="true"/>
+      </arg>
+      <arg type="u" name="sample_rate"/>
+      <arg type="u" name="channels"/>
+      <arg type="s" name="sample_format"/>
       <arg type="b" name="done"/>
     </signal>
 
