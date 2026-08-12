@@ -21,6 +21,7 @@ typedef struct _XdpRequest
   XdpContext *context;
 
   XdpDbusImplRequest *impl_request;
+  GCancellable *cancellable;
 } XdpRequest;
 
 struct _XdpRequestClass
@@ -50,6 +51,8 @@ void xdp_request_export (XdpRequest      *request,
 void xdp_request_unexport (XdpRequest *request);
 
 const char *xdp_request_get_object_path (XdpRequest *request);
+
+GCancellable *xdp_request_get_cancellable (XdpRequest *request);
 
 void xdp_request_set_impl_request (XdpRequest         *request,
                                    XdpDbusImplRequest *impl_request);

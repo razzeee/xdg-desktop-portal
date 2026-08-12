@@ -17,6 +17,7 @@
 #include "global-shortcuts.h"
 #include "inhibit.h"
 #include "input-capture.h"
+#include "language.h"
 #include "location.h"
 #include "memory-monitor.h"
 #include "network-monitor.h"
@@ -32,8 +33,10 @@
 #include "screenshot.h"
 #include "secret.h"
 #include "settings.h"
+#include "speech.h"
 #include "trash.h"
 #include "usb.h"
+#include "vision.h"
 #include "wallpaper.h"
 #include "xdp-app-info-registry.h"
 #include "xdp-dbus.h"
@@ -389,6 +392,9 @@ xdp_context_register (XdpContext       *context,
   init_wallpaper (context);
   init_account (context);
   init_email (context);
+  init_language (context);
+  init_speech (context);
+  init_vision (context);
   init_secret (context, context->cancellable);
   init_global_shortcuts (context);
   init_dynamic_launcher (context);
