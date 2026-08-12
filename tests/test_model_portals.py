@@ -7,6 +7,7 @@ import tests.xdp_utils as xdp
 
 import dbus
 import pytest
+import xml.etree.ElementTree as ET
 
 
 @pytest.fixture
@@ -19,6 +20,24 @@ def required_templates():
 
 
 class TestModelPortals:
+    def test_depth_signal_includes_metric_unit(self, portals, dbus_con):
+        portal = dbus_con.get_object(
+            "org.freedesktop.portal.Desktop", "/org/freedesktop/portal/desktop"
+        )
+        xml = portal.Introspect(
+            dbus_interface="org.freedesktop.DBus.Introspectable"
+        )
+        root = ET.fromstring(xml)
+        interface = root.find("./interface[@name='org.freedesktop.portal.Vision']")
+        signal = interface.find("./signal[@name='VisionDepthReceived']")
+
+        assert [arg.get("type") for arg in signal.findall("arg")] == [
+            "o",
+            "o",
+            "(iiadsdd)",
+            "b",
+        ]
+
     def create_speech_session(self, dbus_con, use_case):
         speech_intf = xdp.get_portal_iface(dbus_con, "Speech")
         response = xdp.Request(dbus_con, speech_intf).call(
