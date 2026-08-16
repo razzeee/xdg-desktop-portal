@@ -100,7 +100,7 @@ tests = {
   'inputcapture': {},
   'location': {'enabled': have_geoclue},
   'memorymonitor': {},
-  'model_portals': {},
+  'model_portals': {'is_parallel': false},
   'notification': {'timeout': 225},
   'openuri': {},
   'permission_store': {},
@@ -166,6 +166,7 @@ foreach testname, params : tests
     ],
     env: pytest_env,
     suite: ['integration'],
+    is_parallel: params.get('is_parallel', true),
     timeout: params.get('timeout', 200),
   )
 endforeach
