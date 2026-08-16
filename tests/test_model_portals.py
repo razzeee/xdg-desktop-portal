@@ -12,6 +12,7 @@ from itertools import count
 
 import dbus
 import pytest
+from gi.repository import GLib
 
 import tests.xdp_utils as xdp
 
@@ -186,6 +187,31 @@ def _payloads(events, request, session):
 
 def _assert_loading(events, request, session):
     assert _payloads(events, request, session) == [("Loading model",)]
+
+
+@contextmanager
+def _close_when(closable, ready):
+    closed = False
+
+    def close_when_ready():
+        nonlocal closed
+        if not ready():
+            return GLib.SOURCE_CONTINUE
+
+        closed = True
+        closable.close()
+        return GLib.SOURCE_REMOVE
+
+    source_id = GLib.timeout_add(1, close_when_ready)
+    try:
+        yield
+    finally:
+        if not closed:
+            GLib.source_remove(source_id)
+
+
+def _backend_called(mock_intf, method):
+    return bool(mock_intf.GetMethodCalls(method))
 
 
 def _new_memfd(name, contents):
@@ -1014,18 +1040,20 @@ class TestModelPortals:
 
         request = xdp.Request(dbus_con, interface)
         try:
-            request.schedule_close(100)
-            response = request.call(
-                "CreateSession",
-                parent_window="",
-                use_case="language.summarize",
-                instructions="",
-                options={
-                    "session_handle_token": dbus.String(
-                        "tentative_session", variant_level=1
-                    ),
-                },
-            )
+            with _close_when(
+                request, lambda: _backend_called(mock_intf, "CreateSession")
+            ):
+                response = request.call(
+                    "CreateSession",
+                    parent_window="",
+                    use_case="language.summarize",
+                    instructions="",
+                    options={
+                        "session_handle_token": dbus.String(
+                            "tentative_session", variant_level=1
+                        ),
+                    },
+                )
             args = _backend_args(mock_intf, "CreateSession")
             backend_session = str(args[1])
             xdp.wait_for(lambda: backend_session in session_closed)
@@ -1065,14 +1093,16 @@ class TestModelPortals:
 
         try:
             request = xdp.Request(dbus_con, interface)
-            request.schedule_close(100)
-            response = request.call(
-                "StreamResponse",
-                session_handle=session.handle,
-                input_json='[{"type":"input_text","text":"cancel"}]',
-                media_fds=dbus.Array([dbus.types.UnixFd(fd)], signature="h"),
-                options={},
-            )
+            with _close_when(
+                request, lambda: _backend_called(mock_intf, "StreamResponse")
+            ):
+                response = request.call(
+                    "StreamResponse",
+                    session_handle=session.handle,
+                    input_json='[{"type":"input_text","text":"cancel"}]',
+                    media_fds=dbus.Array([dbus.types.UnixFd(fd)], signature="h"),
+                    options={},
+                )
         finally:
             os.close(fd)
 
@@ -1084,7 +1114,7 @@ class TestModelPortals:
         _close_session(session)
 
     @pytest.mark.parametrize(
-        "template_params",
+        "template_params,close_after_reply",
         (
             pytest.param(
                 {
@@ -1094,6 +1124,7 @@ class TestModelPortals:
                         "signal-delay": 500,
                     }
                 },
+                False,
                 id="session-close-before-backend-reply",
             ),
             pytest.param(
@@ -1104,26 +1135,41 @@ class TestModelPortals:
                         "signal-delay": 500,
                     }
                 },
+                True,
                 id="backend-reply-before-session-close",
             ),
         ),
     )
-    def test_session_close_cancels_inflight_stream(self, portals, dbus_con):
+    def test_session_close_cancels_inflight_stream(
+        self, portals, dbus_con, close_after_reply
+    ):
         interface, session, _, _ = _create_session(
             dbus_con, "Language", "language.summarize"
         )
         mock_intf = xdp.get_mock_iface(dbus_con)
-        session.schedule_close(25)
+        impl = dbus.Interface(
+            dbus_con.get_object(IMPL_BUS_NAME, DESKTOP_PATH),
+            LANGUAGE_IMPL_IFACE,
+        )
 
         with _record_signals(dbus_con, "Language", ("TokenReceived",)) as signals:
             request = xdp.Request(dbus_con, interface)
-            response = request.call(
-                "StreamResponse",
-                session_handle=session.handle,
-                input_json='[{"type":"input_text","text":"cancel"}]',
-                media_fds=dbus.Array([], signature="h"),
-                options={},
-            )
+            if close_after_reply:
+                ready = lambda: (
+                    request.handle
+                    in {str(path) for path in impl.GetCompletedRequests()}
+                )
+            else:
+                ready = lambda: _backend_called(mock_intf, "StreamResponse")
+
+            with _close_when(session, ready):
+                response = request.call(
+                    "StreamResponse",
+                    session_handle=session.handle,
+                    input_json='[{"type":"input_text","text":"cancel"}]',
+                    media_fds=dbus.Array([], signature="h"),
+                    options={},
+                )
             xdp.wait(550)
 
         assert response is not None

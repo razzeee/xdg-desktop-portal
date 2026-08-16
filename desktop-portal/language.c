@@ -739,10 +739,9 @@ language_new (XdpContext          *context,
   return language;
 }
 
-DexFuture *
-init_language (gpointer user_data)
+void
+init_language (XdpContext *context)
 {
-  XdpContext *context = XDP_CONTEXT (user_data);
   g_autoptr(Language) language = NULL;
   GDBusConnection *connection = xdp_context_get_connection (context);
   XdpPortalConfig *config = xdp_context_get_config (context);
@@ -752,18 +751,18 @@ init_language (gpointer user_data)
 
   impl_config = xdp_portal_config_find (config, LANGUAGE_DBUS_IMPL_IFACE);
   if (impl_config == NULL)
-    return dex_future_new_true ();
+    return;
 
-  impl = dex_await_object (xdp_dbus_impl_language_proxy_new_future (
-      connection,
-      G_DBUS_PROXY_FLAGS_NONE,
-      impl_config->dbus_name,
-      DESKTOP_DBUS_PATH),
-    &error);
+  impl = xdp_dbus_impl_language_proxy_new_sync (connection,
+                                                G_DBUS_PROXY_FLAGS_NONE,
+                                                impl_config->dbus_name,
+                                                DESKTOP_DBUS_PATH,
+                                                NULL,
+                                                &error);
   if (impl == NULL)
     {
       g_warning ("Failed to create language proxy: %s", error->message);
-      return dex_future_new_false ();
+      return;
     }
 
   language = language_new (context, impl);
@@ -771,5 +770,4 @@ init_language (gpointer user_data)
     context,
     G_DBUS_INTERFACE_SKELETON (g_steal_pointer (&language)),
     XDP_CONTEXT_EXPORT_FLAGS_RUN_IN_FIBER);
-  return dex_future_new_true ();
 }
