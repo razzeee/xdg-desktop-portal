@@ -496,9 +496,9 @@ xdp_context_register (XdpContext       *context,
   init_wallpaper (context);
   init_account (context);
   init_email (context);
-  init_portal_in_fiber (context, init_language);
-  init_portal_in_fiber (context, init_speech);
-  init_portal_in_fiber (context, init_vision);
+  init_language (context);
+  init_speech (context);
+  init_vision (context);
   init_global_shortcuts (context);
   init_dynamic_launcher (context);
   init_screen_cast (context);

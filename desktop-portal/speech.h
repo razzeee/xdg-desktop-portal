@@ -4,8 +4,6 @@
 
 #pragma once
 
-#include <libdex.h>
-
 #include "xdp-types.h"
 
-DexFuture * init_speech (gpointer user_data);
+void init_speech (XdpContext *context);
