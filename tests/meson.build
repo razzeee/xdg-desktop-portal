@@ -164,7 +164,7 @@ template_files = [
   'templates/screencast.py',
   'templates/screenshot.py',
   'templates/settings.py',
-  'templates/speech.py',
+  'templates/spokenlanguage.py',
   'templates/usb.py',
   'templates/vision.py',
   'templates/wallpaper.py',

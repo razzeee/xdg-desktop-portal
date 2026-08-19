@@ -33,7 +33,7 @@
 #include "screenshot.h"
 #include "secret.h"
 #include "settings.h"
-#include "speech.h"
+#include "spoken-language.h"
 #include "trash.h"
 #include "usb.h"
 #include "vision.h"
@@ -497,7 +497,7 @@ xdp_context_register (XdpContext       *context,
   init_account (context);
   init_email (context);
   init_language (context);
-  init_speech (context);
+  init_spoken_language (context);
   init_vision (context);
   init_global_shortcuts (context);
   init_dynamic_launcher (context);

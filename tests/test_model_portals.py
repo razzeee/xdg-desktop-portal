@@ -27,7 +27,7 @@ REQUIRED_SEALS = fcntl.F_SEAL_GROW | fcntl.F_SEAL_WRITE | fcntl.F_SEAL_SHRINK
 
 MODALITIES = (
     pytest.param("Language", "language.summarize", id="language"),
-    pytest.param("Speech", "speech.transcribe", id="speech"),
+    pytest.param("SpokenLanguage", "speech.transcribe", id="spoken-language"),
     pytest.param("Vision", "vision.describe", id="vision"),
 )
 
@@ -76,7 +76,7 @@ _session_tokens = count()
 def required_templates():
     return {
         "language": {},
-        "speech": {},
+        "spokenlanguage": {},
         "vision": {},
     }
 
@@ -262,7 +262,7 @@ def _vision_options(method):
 
 class TestModelPortals:
     def test_versions_and_depth_introspection(self, portals, dbus_con):
-        for portal in ("Language", "Speech", "Vision"):
+        for portal in ("Language", "SpokenLanguage", "Vision"):
             xdp.check_version(dbus_con, portal, 1)
 
         portal = xdp.get_xdp_dbus_object(dbus_con)
@@ -298,7 +298,7 @@ class TestModelPortals:
         "portal,use_case",
         (
             pytest.param("Language", "speech.transcribe", id="language"),
-            pytest.param("Speech", "vision.describe", id="speech"),
+            pytest.param("SpokenLanguage", "vision.describe", id="spoken-language"),
             pytest.param("Vision", "language.summarize", id="vision"),
         ),
     )
@@ -320,7 +320,7 @@ class TestModelPortals:
         "portal,use_case",
         (
             pytest.param("Language", "language.unknown", id="language"),
-            pytest.param("Speech", "speech.unknown", id="speech"),
+            pytest.param("SpokenLanguage", "speech.unknown", id="spoken-language"),
             pytest.param("Vision", "vision.unknown", id="vision"),
         ),
     )
@@ -430,11 +430,11 @@ class TestModelPortals:
 
     def test_session_cannot_cross_modalities(self, portals, dbus_con):
         _, session, _, _ = _create_session(dbus_con, "Language", "language.summarize")
-        speech = xdp.get_portal_iface(dbus_con, "Speech")
+        spoken_language = xdp.get_portal_iface(dbus_con, "SpokenLanguage")
         mock_intf = xdp.get_mock_iface(dbus_con)
 
         with _expect_dbus_error(ACCESS_DENIED):
-            xdp.Request(dbus_con, speech).call(
+            xdp.Request(dbus_con, spoken_language).call(
                 "Prewarm",
                 session_handle=session.handle,
                 options={},
@@ -670,15 +670,17 @@ class TestModelPortals:
         ]
         _close_session(session)
 
-    def test_speech_stream_transcribe(self, portals, dbus_con):
+    def test_spoken_language_stream_transcribe(self, portals, dbus_con):
         interface, session, _, _ = _create_session(
-            dbus_con, "Speech", "speech.transcribe"
+            dbus_con, "SpokenLanguage", "speech.transcribe"
         )
         mock_intf = xdp.get_mock_iface(dbus_con)
         audio = b"mock f32le audio"
 
         with _record_signals(
-            dbus_con, "Speech", ("ModelLoading", "TranscriptionReceived")
+            dbus_con,
+            "SpokenLanguage",
+            ("ModelLoading", "TranscriptionReceived"),
         ) as signals:
             fd = _new_memfd("speech-audio", audio)
             try:
@@ -708,14 +710,14 @@ class TestModelPortals:
         ]
         _close_session(session)
 
-    def test_speech_stream_synthesize(self, portals, dbus_con):
+    def test_spoken_language_stream_synthesize(self, portals, dbus_con):
         interface, session, _, _ = _create_session(
-            dbus_con, "Speech", "speech.synthesize"
+            dbus_con, "SpokenLanguage", "speech.synthesize"
         )
         mock_intf = xdp.get_mock_iface(dbus_con)
 
         with _record_signals(
-            dbus_con, "Speech", ("ModelLoading", "AudioReceived")
+            dbus_con, "SpokenLanguage", ("ModelLoading", "AudioReceived")
         ) as signals:
             request = xdp.Request(dbus_con, interface)
             response = request.call(
@@ -851,11 +853,11 @@ class TestModelPortals:
                 id="language",
             ),
             pytest.param(
-                "Speech",
+                "SpokenLanguage",
                 "speech.transcribe",
                 "StreamSynthesize",
                 {"text": "text"},
-                id="speech",
+                id="spoken-language",
             ),
         ),
     )
@@ -899,7 +901,7 @@ class TestModelPortals:
 
     def test_synthesize_rejects_empty_text(self, portals, dbus_con):
         interface, session, _, _ = _create_session(
-            dbus_con, "Speech", "speech.synthesize"
+            dbus_con, "SpokenLanguage", "speech.synthesize"
         )
         mock_intf = xdp.get_mock_iface(dbus_con)
 
@@ -944,7 +946,7 @@ class TestModelPortals:
             pytest.param(
                 {
                     "language": {"response": 1},
-                    "speech": {"response": 1},
+                    "spokenlanguage": {"response": 1},
                     "vision": {"response": 1},
                 },
                 1,
@@ -955,7 +957,7 @@ class TestModelPortals:
             pytest.param(
                 {
                     "language": {"response": 2},
-                    "speech": {"response": 2},
+                    "spokenlanguage": {"response": 2},
                     "vision": {"response": 2},
                 },
                 2,

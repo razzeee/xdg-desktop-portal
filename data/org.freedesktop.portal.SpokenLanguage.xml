@@ -6,8 +6,8 @@
 
 <node name="/" xmlns:doc="http://www.freedesktop.org/dbus/1.0/doc.dtd">
   <!--
-      org.freedesktop.portal.Speech:
-      @short_description: Portal for local speech model tasks
+      org.freedesktop.portal.SpokenLanguage:
+      @short_description: Portal for local spoken-language tasks
 
       Supported use-cases are ``speech.transcribe`` for verbatim source-language
       transcription, ``speech.translate`` for speech-to-English translation, and
@@ -32,7 +32,7 @@
 
       This documentation describes version 1 of this interface.
   -->
-  <interface name="org.freedesktop.portal.Speech">
+  <interface name="org.freedesktop.portal.SpokenLanguage">
     <!--
         GetUseCaseAvailability:
         @use_case: ``speech.transcribe``, ``speech.translate``, or ``speech.synthesize``
@@ -61,7 +61,7 @@
     <!--
         CreateSession:
         @parent_window: Identifier for the application window, see :doc:`window-identifiers`
-        @use_case: Supported speech task token
+        @use_case: Supported spoken-language task token
         @instructions: Stable system instructions for this session
         @options: Vardict with optional ``handle_token`` and ``session_handle_token`` strings
         @handle: Object path for the :ref:`org.freedesktop.portal.Request` object representing this call
@@ -82,7 +82,7 @@
 
     <!--
         Prewarm:
-        @session_handle: A speech session handle returned by CreateSession
+        @session_handle: A SpokenLanguage session handle returned by CreateSession
         @options: Vardict with optional ``handle_token`` string
         @handle: Object path for the :ref:`org.freedesktop.portal.Request` object representing this call
 
@@ -101,7 +101,7 @@
 
     <!--
         StreamTranscribe:
-        @session_handle: A speech session handle returned by CreateSession
+        @session_handle: A SpokenLanguage session handle returned by CreateSession
         @audio_fd: Readable, sealable memfd containing 16 kHz mono f32le PCM
         @options: Vardict with optional ``handle_token``, ``source_language_hint``, and ``execution_mode`` strings
         @handle: Object path for the :ref:`org.freedesktop.portal.Request` object representing this call
@@ -122,7 +122,7 @@
 
     <!--
         StreamSynthesize:
-        @session_handle: A speech synthesis session handle returned by CreateSession
+        @session_handle: A synthesis session returned by CreateSession
         @text: Non-empty phrase to synthesize
         @options: Vardict with optional ``handle_token``, ``voice_id``, ``language_hint``, and ``execution_mode`` strings
         @handle: Object path for the :ref:`org.freedesktop.portal.Request` object representing this call
@@ -142,7 +142,7 @@
     <!--
         ModelLoading:
         @request_handle: Request that is preparing its backing model or runtime
-        @session_handle: Speech session used by the request
+        @session_handle: SpokenLanguage session used by the request
         @message: Human-readable, non-localized progress message
 
         Emitted while the model or runtime for @request_handle is being
@@ -157,7 +157,7 @@
     <!--
         TranscriptionReceived:
         @request_handle: Request that produced this event
-        @session_handle: Speech session used by the request
+        @session_handle: SpokenLanguage session used by the request
         @text: Next transcript or translation segment, possibly empty at the end
         @done: Whether this is the terminal stream event for the request
 
@@ -174,7 +174,7 @@
     <!--
         AudioReceived:
         @request_handle: Request that produced this event
-        @session_handle: Speech session used by the request
+        @session_handle: SpokenLanguage session used by the request
         @audio: Headerless, interleaved PCM frames; possibly empty at the end
         @sample_rate: Number of PCM frames per second
         @channels: Number of interleaved audio channels
