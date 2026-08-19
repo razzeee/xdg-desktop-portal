@@ -6,4 +6,4 @@
 
 #include "xdp-types.h"
 
-void init_speech (XdpContext *context);
+void init_spoken_language (XdpContext *context);

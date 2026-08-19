@@ -15,7 +15,7 @@ from tests.templates.xdp_utils import ImplRequest, ImplSession, Response, init_l
 BUS_NAME = "org.freedesktop.impl.portal.Test"
 MAIN_OBJ = "/org/freedesktop/portal/desktop"
 SYSTEM_BUS = False
-MAIN_IFACE = "org.freedesktop.impl.portal.Speech"
+MAIN_IFACE = "org.freedesktop.impl.portal.SpokenLanguage"
 VERSION = 1
 
 
@@ -23,7 +23,7 @@ logger = init_logger(__name__)
 
 
 @dataclass
-class SpeechParameters:
+class SpokenLanguageParameters:
     delay: int
     reply_delay: int
     signal_delay: int
@@ -35,9 +35,9 @@ def load(mock, parameters=None):
     parameters = parameters or {}
     logger.debug(f"Loading parameters: {parameters}")
 
-    assert not hasattr(mock, "speech_params")
+    assert not hasattr(mock, "spokenlanguage_params")
     delay = parameters.get("delay", 1)
-    mock.speech_params = SpeechParameters(
+    mock.spokenlanguage_params = SpokenLanguageParameters(
         delay=delay,
         reply_delay=parameters.get("reply-delay", delay),
         signal_delay=parameters.get("signal-delay", 0),
@@ -48,7 +48,7 @@ def load(mock, parameters=None):
         MAIN_IFACE,
         dbus.Dictionary({"version": dbus.UInt32(VERSION)}),
     )
-    mock.speech_sessions: dict[str, ImplSession] = {}
+    mock.spokenlanguage_sessions: dict[str, ImplSession] = {}
 
 
 def _schedule(delay, callback, *args):
@@ -59,7 +59,7 @@ def _schedule(delay, callback, *args):
 
 
 def _schedule_signals(self, handle, session_handle, signals):
-    params = self.speech_params
+    params = self.spokenlanguage_params
     signals = (
         ("ModelLoading", "s", (dbus.String("Loading model"),)),
         *signals,
@@ -107,7 +107,7 @@ def _response(response):
 
 
 def _complete_request(self, request):
-    params = self.speech_params
+    params = self.spokenlanguage_params
     if params.expect_close:
         request.wait_for_close()
     else:
@@ -152,9 +152,9 @@ def CreateSession(
         f"{use_case}, {instructions})"
     )
     session = ImplSession(self, BUS_NAME, session_handle, app_id).export(
-        lambda: self.speech_sessions.pop(session_handle, None)
+        lambda: self.spokenlanguage_sessions.pop(session_handle, None)
     )
-    self.speech_sessions[session_handle] = session
+    self.spokenlanguage_sessions[session_handle] = session
 
     request = _new_request(self, handle, cb_success, cb_error)
     _complete_request(self, request)
@@ -168,7 +168,7 @@ def CreateSession(
 )
 def Prewarm(self, handle, session_handle, cb_success, cb_error):
     logger.debug(f"Prewarm({handle}, {session_handle})")
-    assert session_handle in self.speech_sessions
+    assert session_handle in self.spokenlanguage_sessions
 
     request = _new_request(self, handle, cb_success, cb_error)
     _complete_request(self, request)
@@ -191,7 +191,7 @@ def StreamTranscribe(
     cb_error,
 ):
     logger.debug(f"StreamTranscribe({handle}, {session_handle}, {audio_fd}, {options})")
-    assert session_handle in self.speech_sessions
+    assert session_handle in self.spokenlanguage_sessions
     payloads = (
         (
             "TranscriptionReceived",
@@ -226,7 +226,7 @@ def StreamSynthesize(
     cb_error,
 ):
     logger.debug(f"StreamSynthesize({handle}, {session_handle}, {text}, {options})")
-    assert session_handle in self.speech_sessions
+    assert session_handle in self.spokenlanguage_sessions
     signals = tuple(
         (
             "AudioReceived",
