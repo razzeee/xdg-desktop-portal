@@ -294,6 +294,13 @@ on_impl_request_proxy_created (DexFuture *future,
                     G_CALLBACK (request_authorize_callback),
                     request);
 
+  g_clear_signal_handler (&data->peer_disconnect_handler, request->context);
+  if (data->peer_disconnected)
+    return dex_future_new_for_error (
+      g_error_new_literal (G_IO_ERROR,
+                           G_IO_ERROR_CANCELLED,
+                           "Caller disconnected"));
+
   return dex_future_new_for_object (request);
 }
 
