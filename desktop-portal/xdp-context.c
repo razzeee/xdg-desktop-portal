@@ -36,6 +36,7 @@
 #include "spoken-language.h"
 #include "trash.h"
 #include "usb.h"
+#include "vision.h"
 #include "wallpaper.h"
 #include "xdp-app-info-registry.h"
 #include "xdp-dbus.h"
@@ -518,6 +519,7 @@ xdp_context_register (XdpContext       *context,
   init_email (context);
   init_language (context);
   init_spoken_language (context);
+  init_vision (context);
   init_global_shortcuts (context);
   init_dynamic_launcher (context);
   init_screen_cast (context);

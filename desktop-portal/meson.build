@@ -89,6 +89,7 @@ xdg_desktop_portal_sources = files(
   'settings.c',
   'spoken-language.c',
   'trash.c',
+  'vision.c',
   'wallpaper.c',
   'xdp-app-launch-context.c',
   'xdp-background-monitor.c',

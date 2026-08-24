@@ -41,6 +41,7 @@ portal_sources = files(
   'org.freedesktop.portal.SpokenLanguage.xml',
   'org.freedesktop.portal.Trash.xml',
   'org.freedesktop.portal.Usb.xml',
+  'org.freedesktop.portal.Vision.xml',
   'org.freedesktop.portal.Wallpaper.xml',
 )
 
@@ -74,6 +75,7 @@ portal_impl_sources = files(
   'org.freedesktop.impl.portal.Settings.xml',
   'org.freedesktop.impl.portal.SpokenLanguage.xml',
   'org.freedesktop.impl.portal.Usb.xml',
+  'org.freedesktop.impl.portal.Vision.xml',
   'org.freedesktop.impl.portal.Wallpaper.xml',
 )
 
