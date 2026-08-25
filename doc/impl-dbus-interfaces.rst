@@ -23,6 +23,7 @@ accessible to sandboxed applications.
    doc-org.freedesktop.impl.portal.GlobalShortcuts.rst
    doc-org.freedesktop.impl.portal.Inhibit.rst
    doc-org.freedesktop.impl.portal.InputCapture.rst
+   doc-org.freedesktop.impl.portal.Language.rst
    doc-org.freedesktop.impl.portal.Lockdown.rst
    doc-org.freedesktop.impl.portal.Notification.rst
    doc-org.freedesktop.impl.portal.PermissionStore.rst

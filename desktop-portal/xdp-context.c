@@ -17,6 +17,7 @@
 #include "global-shortcuts.h"
 #include "inhibit.h"
 #include "input-capture.h"
+#include "language.h"
 #include "location.h"
 #include "memory-monitor.h"
 #include "network-monitor.h"
@@ -514,6 +515,7 @@ xdp_context_register (XdpContext       *context,
   init_wallpaper (context);
   init_account (context);
   init_email (context);
+  init_language (context);
   init_global_shortcuts (context);
   init_dynamic_launcher (context);
   init_screen_cast (context);

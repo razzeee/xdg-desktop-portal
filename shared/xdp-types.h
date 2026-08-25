@@ -78,6 +78,9 @@ typedef struct _XdpDbusImplAccess XdpDbusImplAccess;
 #define INPUT_CAPTURE_PERMISSION_TABLE "input-capture"
 #define INPUT_CAPTURE_PERMISSION_ID "input-capture"
 
+#define LANGUAGE_DBUS_IFACE DESKTOP_DBUS_IFACE ".Language"
+#define LANGUAGE_DBUS_IMPL_IFACE DESKTOP_DBUS_IMPL_IFACE ".Language"
+
 #define LOCATION_DBUS_IFACE DESKTOP_DBUS_IFACE ".Location"
 #define LOCATION_PERMISSION_TABLE "location"
 #define LOCATION_PERMISSION_ID "location"
