@@ -162,6 +162,7 @@ template_files = [
   'templates/screencast.py',
   'templates/screenshot.py',
   'templates/settings.py',
+  'templates/spokenlanguage.py',
   'templates/usb.py',
   'templates/wallpaper.py',
   'templates/xdp_utils.py',

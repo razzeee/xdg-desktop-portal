@@ -35,5 +35,6 @@ accessible to sandboxed applications.
    doc-org.freedesktop.impl.portal.Secret.rst
    doc-org.freedesktop.impl.portal.Session.rst
    doc-org.freedesktop.impl.portal.Settings.rst
+   doc-org.freedesktop.impl.portal.SpokenLanguage.rst
    doc-org.freedesktop.impl.portal.Usb.rst
    doc-org.freedesktop.impl.portal.Wallpaper.rst
