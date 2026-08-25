@@ -222,6 +222,7 @@ def xdg_desktop_portal_dir_default_files() -> dict[str, bytes]:
         "org.freedesktop.impl.portal.Settings",
         "org.freedesktop.impl.portal.SpokenLanguage",
         "org.freedesktop.impl.portal.Usb",
+        "org.freedesktop.impl.portal.Vision",
         "org.freedesktop.impl.portal.Wallpaper",
     ]
 
