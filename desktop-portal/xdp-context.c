@@ -17,6 +17,7 @@
 #include "global-shortcuts.h"
 #include "inhibit.h"
 #include "input-capture.h"
+#include "language.h"
 #include "location.h"
 #include "memory-monitor.h"
 #include "network-monitor.h"
@@ -72,6 +73,7 @@ struct _XdpContext
 
   GCancellable *cancellable;
   GPtrArray *pending_inits; /* DexFuture */
+  gboolean shutting_down;
 };
 
 G_DEFINE_FINAL_TYPE (XdpContext,
@@ -82,6 +84,8 @@ static void
 xdp_context_dispose (GObject *object)
 {
   XdpContext *context = XDP_CONTEXT (object);
+
+  context->shutting_down = TRUE;
 
   if (context->peer_disconnect_handle_id)
     {
@@ -117,6 +121,15 @@ xdp_context_dispose (GObject *object)
 
   while (g_main_context_iteration (NULL, FALSE))
     ;
+
+  if (context->connection != NULL)
+    {
+      g_autoptr(GError) error = NULL;
+
+      if (!g_dbus_connection_flush_sync (context->connection, NULL, &error))
+        g_debug ("Failed to flush portal connection during shutdown: %s",
+                 error->message);
+    }
 
   g_clear_object (&context->portal_config);
   g_clear_object (&context->connection);
@@ -177,6 +190,13 @@ gboolean
 xdp_context_is_verbose (XdpContext *context)
 {
   return context->verbose;
+}
+
+gboolean
+xdp_context_is_cancelled (XdpContext *context)
+{
+  return context->shutting_down ||
+         g_cancellable_is_cancelled (context->cancellable);
 }
 
 XdpAppInfoRegistry *
@@ -251,7 +271,8 @@ authorize_callback_fiber (GDBusInterfaceSkeleton *interface,
       return FALSE;
     }
 
-  g_object_set_data (G_OBJECT (invocation), "xdp-app-info", app_info);
+  g_object_set_data_full (G_OBJECT (invocation), "xdp-app-info",
+                          g_steal_pointer (&app_info), g_object_unref);
 
   return TRUE;
 }
@@ -494,6 +515,7 @@ xdp_context_register (XdpContext       *context,
   init_wallpaper (context);
   init_account (context);
   init_email (context);
+  init_language (context);
   init_global_shortcuts (context);
   init_dynamic_launcher (context);
   init_screen_cast (context);

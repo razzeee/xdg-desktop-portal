@@ -46,6 +46,7 @@ replacement will be documented in :doc:`org.freedesktop.host.portal.Registry
    doc-org.freedesktop.portal.GlobalShortcuts.rst
    doc-org.freedesktop.portal.Inhibit.rst
    doc-org.freedesktop.portal.InputCapture.rst
+   doc-org.freedesktop.portal.Language.rst
    doc-org.freedesktop.portal.Location.rst
    doc-org.freedesktop.portal.MemoryMonitor.rst
    doc-org.freedesktop.portal.NetworkMonitor.rst

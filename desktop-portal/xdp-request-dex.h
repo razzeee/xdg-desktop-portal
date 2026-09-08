@@ -22,6 +22,8 @@ DexFuture * xdp_request_dex_new (XdpContext             *context,
 gboolean xdp_request_dex_export (XdpRequestDex  *request,
                                  GError        **error);
 
+void xdp_request_dex_close (XdpRequestDex *request);
+
 void xdp_request_dex_emit_response (XdpRequestDex                *request,
                                     XdgDesktopPortalResponseEnum  response,
                                     GVariant                     *results);
