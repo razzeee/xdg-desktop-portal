@@ -261,9 +261,110 @@ def _vision_options(method):
 
 
 class TestModelPortals:
+    @pytest.mark.parametrize(
+        "template_params", [{"language": {"version": 2, "delay": 10, "reply-delay": 1}}]
+    )
+    @pytest.mark.parametrize("include_reasoning", [True, False])
+    def test_language_reasoning_privacy_and_completion_metadata(
+        self, portals, dbus_con, include_reasoning
+    ):
+        interface, session, _, _ = _create_session(
+            dbus_con, "Language", "language.analyze"
+        )
+        other = _new_bus()
+        other.set_exit_on_disconnect(False)
+        try:
+            with (
+                _record_signals(
+                    dbus_con, "Language", ("ReasoningReceived", "TokenReceived")
+                ) as signals,
+                _record_signals(
+                    other, "Language", ("ReasoningReceived",)
+                ) as other_signals,
+            ):
+                request = xdp.Request(dbus_con, interface)
+                response = request.call(
+                    "StreamResponse",
+                    session_handle=session.handle,
+                    input_json='[{"type":"input_text","text":"Hello"}]',
+                    media_fds=dbus.Array([], signature="h"),
+                    options={
+                        "thinking": dbus.String("on", variant_level=1),
+                        "include_reasoning": dbus.Boolean(
+                            include_reasoning, variant_level=1
+                        ),
+                    },
+                )
+                assert response is not None
+                assert response.response == 0
+                assert _plain(response.results["usage"]) == {
+                    "prompt_tokens": 10,
+                    "completion_tokens": 5,
+                    "total_tokens": 15,
+                }
+                assert response.results["finish_reason"] == "stop"
+                assert _payloads(signals["TokenReceived"], request, session) == [
+                    ("Hello", False),
+                    (" world", True),
+                ]
+                if include_reasoning:
+                    assert _payloads(
+                        signals["ReasoningReceived"], request, session
+                    ) == [("Private reasoning",)]
+                else:
+                    assert signals["ReasoningReceived"] == []
+                other.get_object(BUS_NAME, DESKTOP_PATH).Ping(
+                    dbus_interface="org.freedesktop.DBus.Peer"
+                )
+                assert other_signals["ReasoningReceived"] == []
+                args = _backend_args(xdp.get_mock_iface(dbus_con), "StreamResponse2")
+                assert "temperature" not in args[4]
+        finally:
+            other.close()
+            _close_session(session)
+
+    @pytest.mark.parametrize("template_params", [{"language": {"version": 2}}])
+    def test_language_reasoning_capabilities(self, portals, dbus_con):
+        interface, session, _, _ = _create_session(
+            dbus_con, "Language", "language.analyze"
+        )
+        response = xdp.Request(dbus_con, interface).call(
+            "GetReasoningCapabilities", session_handle=session.handle, options={}
+        )
+        assert response is not None
+        assert response.response == 0
+        assert _plain(response.results["thinking_modes"]) == ["auto", "on", "off"]
+        assert response.results["reasoning_output"]
+        other = _new_bus()
+        try:
+            with _expect_dbus_error(ACCESS_DENIED):
+                xdp.Request(other, xdp.get_portal_iface(other, "Language")).call(
+                    "GetReasoningCapabilities",
+                    session_handle=session.handle,
+                    options={},
+                )
+        finally:
+            other.close()
+            _close_session(session)
+
+    def test_language_v1_backend_rejects_explicit_reasoning(self, portals, dbus_con):
+        interface, session, _, _ = _create_session(
+            dbus_con, "Language", "language.analyze"
+        )
+        with _expect_dbus_error("org.freedesktop.DBus.Error.NotSupported"):
+            xdp.Request(dbus_con, interface).call(
+                "StreamResponse",
+                session_handle=session.handle,
+                input_json='[{"type":"input_text","text":"Hello"}]',
+                media_fds=dbus.Array([], signature="h"),
+                options={"thinking": dbus.String("on", variant_level=1)},
+            )
+        assert xdp.get_mock_iface(dbus_con).GetMethodCalls("StreamResponse") == []
+        _close_session(session)
+
     def test_versions_and_depth_introspection(self, portals, dbus_con):
         for portal in ("Language", "SpokenLanguage", "Vision"):
-            xdp.check_version(dbus_con, portal, 1)
+            xdp.check_version(dbus_con, portal, 2 if portal == "Language" else 1)
 
         portal = xdp.get_xdp_dbus_object(dbus_con)
         xml = portal.Introspect(dbus_interface="org.freedesktop.DBus.Introspectable")
@@ -569,7 +670,11 @@ class TestModelPortals:
         "method",
         ("StreamRespondGuided", "StreamSubmitToolResultsGuided"),
     )
-    def test_language_guided_streams(self, portals, dbus_con, method):
+    @pytest.mark.parametrize(
+        "template_params",
+        [{}, {"language": {"version": 2, "reply-delay": 1, "delay": 10}}],
+    )
+    def test_language_guided_streams(self, portals, dbus_con, method, template_params):
         interface, session, _, _ = _create_session(
             dbus_con, "Language", "language.analyze"
         )
@@ -617,14 +722,26 @@ class TestModelPortals:
 
         assert response is not None
         assert response.response == 0
-        args = _backend_args(mock_intf, method)
+        v2 = template_params.get("language", {}).get("version", 1) >= 2
+        args = _backend_args(mock_intf, method + "2" if v2 else method)
         assert _plain(args[:4]) == [
             request.handle,
             str(session.handle),
             prompt,
             [],
         ]
-        expected_tail = [fields_value, tools_value, (32, 0.1, "background")]
+        expected_options = (
+            {
+                "maximum_response_tokens": 32,
+                "temperature": 0.1,
+                "execution_mode": "background",
+            }
+            if v2
+            else (32, 0.1, "background")
+        )
+        expected_tail = [fields_value, tools_value, expected_options]
+        if v2:
+            assert response.results["finish_reason"] == "tool_calls"
         if method == "StreamSubmitToolResultsGuided":
             expected_tail.insert(0, results_value)
         assert _plain(args[4:]) == expected_tail

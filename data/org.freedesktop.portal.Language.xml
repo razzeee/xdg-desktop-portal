@@ -43,9 +43,38 @@
       StreamEmbed accepts only ``execution_mode`` besides standard request
       options.
 
-      This documentation describes version 1 of this interface.
+      Version 2 adds optional ``thinking`` (``auto``, ``on``, ``off``),
+      ``reasoning_effort`` (a model-supported string), and ``include_reasoning``
+      (boolean, default false) to generation options. Explicit unsupported
+      controls fail rather than being ignored. ReasoningReceived carries opted-in
+      reasoning separately from answer text. Successful Request.Response results
+      may include ``finish_reason`` and a ``usage`` vardict with int64 token counts.
+
+      This documentation describes version 2 of this interface.
   -->
   <interface name="org.freedesktop.portal.Language">
+    <!--
+        GetReasoningCapabilities:
+        @session_handle: A language generation session owned by the caller
+        @options: Standard request options, including handle_token
+        @handle: Request handle
+
+        Prepares the assigned runtime if needed. Successful Request.Response
+        results contain thinking_modes and reasoning_efforts as string arrays,
+        and reasoning_output as a boolean. Empty arrays denote unsupported or
+        unverified controls. Available since version 2.
+    -->
+    <method name="GetReasoningCapabilities">
+      <arg type="o" name="session_handle" direction="in"/>
+      <arg type="a{sv}" name="options" direction="in"/>
+      <arg type="o" name="handle" direction="out"/>
+    </method>
+    <!-- Reasoning text is emitted only for requests with include_reasoning=true. -->
+    <signal name="ReasoningReceived">
+      <arg type="o" name="request_handle"/>
+      <arg type="o" name="session_handle"/>
+      <arg type="s" name="text"/>
+    </signal>
     <!--
         GetUseCaseAvailability:
         @use_case: Task token such as ``language.summarize`` or ``language.translate``
