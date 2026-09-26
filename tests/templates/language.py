@@ -53,7 +53,7 @@ def load(mock, parameters=None):
         MAIN_IFACE,
         dbus.Dictionary(
             {
-                "version": dbus.UInt32(VERSION),
+                "version": dbus.UInt32(parameters.get("version", VERSION)),
             }
         ),
     )
@@ -275,6 +275,145 @@ def _guided_signals():
             "a(sss)b",
             (tool_calls, dbus.Boolean(True)),
         ),
+    )
+
+
+def _completion_signal(reason="stop"):
+    return (
+        "GenerationCompleted",
+        "a{sv}",
+        (
+            dbus.Dictionary(
+                {
+                    "finish_reason": dbus.String(reason),
+                    "usage": dbus.Dictionary(
+                        {
+                            "prompt_tokens": dbus.Int64(10),
+                            "completion_tokens": dbus.Int64(5),
+                            "total_tokens": dbus.Int64(15),
+                        },
+                        signature="sv",
+                    ),
+                },
+                signature="sv",
+            ),
+        ),
+    )
+
+
+@dbus.service.method(
+    MAIN_IFACE,
+    in_signature="oo",
+    out_signature="",
+    async_callbacks=("cb_success", "cb_error"),
+)
+def GetReasoningCapabilities(self, handle, session_handle, cb_success, cb_error):
+    assert session_handle in self.language_sessions
+    _complete_request(self, _new_request(self, handle, cb_success, cb_error))
+    _schedule_signals(
+        self,
+        handle,
+        session_handle,
+        (
+            (
+                "GenerationCompleted",
+                "a{sv}",
+                (
+                    dbus.Dictionary(
+                        {
+                            "thinking_modes": dbus.Array(
+                                ["auto", "on", "off"], signature="s"
+                            ),
+                            "reasoning_efforts": dbus.Array([], signature="s"),
+                            "reasoning_output": dbus.Boolean(True),
+                        },
+                        signature="sv",
+                    ),
+                ),
+            ),
+        ),
+    )
+
+
+@dbus.service.method(
+    MAIN_IFACE,
+    in_signature="oosaha{sv}",
+    out_signature="",
+    async_callbacks=("cb_success", "cb_error"),
+)
+def StreamResponse2(
+    self, handle, session_handle, input_json, media_fds, options, cb_success, cb_error
+):
+    assert session_handle in self.language_sessions
+    _complete_request(self, _new_request(self, handle, cb_success, cb_error))
+    # Deliberately emit reasoning even without opt-in to test frontend filtering.
+    _schedule_signals(
+        self,
+        handle,
+        session_handle,
+        (
+            ("ReasoningReceived", "s", (dbus.String("Private reasoning"),)),
+            ("TokenReceived", "sb", (dbus.String("Hello"), dbus.Boolean(False))),
+            ("TokenReceived", "sb", (dbus.String(" world"), dbus.Boolean(True))),
+            _completion_signal(),
+        ),
+    )
+
+
+@dbus.service.method(
+    MAIN_IFACE,
+    in_signature="oosaha(sssb)a(sss)a{sv}",
+    out_signature="",
+    async_callbacks=("cb_success", "cb_error"),
+)
+def StreamRespondGuided2(
+    self,
+    handle,
+    session_handle,
+    prompt,
+    media_fds,
+    fields,
+    tools,
+    options,
+    cb_success,
+    cb_error,
+):
+    assert session_handle in self.language_sessions
+    _complete_request(self, _new_request(self, handle, cb_success, cb_error))
+    _schedule_signals(
+        self,
+        handle,
+        session_handle,
+        (*_guided_signals(), _completion_signal("tool_calls")),
+    )
+
+
+@dbus.service.method(
+    MAIN_IFACE,
+    in_signature="oosaha(sss)a(sssb)a(sss)a{sv}",
+    out_signature="",
+    async_callbacks=("cb_success", "cb_error"),
+)
+def StreamSubmitToolResultsGuided2(
+    self,
+    handle,
+    session_handle,
+    prompt,
+    media_fds,
+    results,
+    fields,
+    tools,
+    options,
+    cb_success,
+    cb_error,
+):
+    assert session_handle in self.language_sessions
+    _complete_request(self, _new_request(self, handle, cb_success, cb_error))
+    _schedule_signals(
+        self,
+        handle,
+        session_handle,
+        (*_guided_signals(), _completion_signal("tool_calls")),
     )
 
 

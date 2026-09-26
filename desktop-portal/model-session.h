@@ -126,6 +126,17 @@ void model_request_emit_signal (ModelRequest *request,
                                 GVariant     *parameters);
 
 void model_request_mark_terminal (ModelRequest *request);
+void model_request_expect_results (ModelRequest *request);
+
+void model_request_set_results (ModelRequest *request,
+                                const char   *request_handle,
+                                const char   *session_handle,
+                                GVariant     *results);
+
+GVariant *model_generation_options_from_vardict (GVariant *options,
+                                                 gboolean guided,
+                                                 gboolean backend_v2,
+                                                 GError **error);
 
 void model_request_take_sealed_fd (ModelRequest *request,
                                    XdpSealedFd  *sealed_fd,
