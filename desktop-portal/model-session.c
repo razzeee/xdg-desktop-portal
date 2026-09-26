@@ -46,9 +46,12 @@ struct _ModelRequest
   DexPromise *terminal;
   DexPromise *closed;
   ModelRequestResources *resources;
+  GVariant *results;
   gulong request_closed_handler;
   gulong session_closed_handler;
   gboolean terminal_seen;
+  gboolean stream_terminal_seen;
+  gboolean expect_results;
   gboolean closed_seen;
   gboolean request_closed_seen;
   gboolean session_closed_seen;
@@ -484,6 +487,74 @@ model_request_options_from_vardict (GVariant  *options,
 }
 
 GVariant *
+model_generation_options_from_vardict (GVariant  *options,
+                                       gboolean   guided,
+                                       gboolean   backend_v2,
+                                       GError   **error)
+{
+  const XdpOptionKey allowed[] = {
+    { "handle_token", G_VARIANT_TYPE_STRING, NULL },
+    { "maximum_response_tokens", G_VARIANT_TYPE_INT64, NULL },
+    { "temperature", G_VARIANT_TYPE_DOUBLE, NULL },
+    { "source_language_hint", G_VARIANT_TYPE_STRING, NULL },
+    { "target_language_hint", G_VARIANT_TYPE_STRING, NULL },
+    { "execution_mode", G_VARIANT_TYPE_STRING, validate_execution_mode },
+    { "thinking", G_VARIANT_TYPE_STRING, NULL },
+    { "reasoning_effort", G_VARIANT_TYPE_STRING, NULL },
+    { "include_reasoning", G_VARIANT_TYPE_BOOLEAN, NULL },
+  };
+  g_autoptr(GVariant) filtered = NULL;
+  g_auto(GVariantDict) values = G_VARIANT_DICT_INIT (NULL);
+  const char *thinking = NULL;
+  const char *effort = NULL;
+  gboolean include_reasoning = FALSE;
+
+  filtered = filter_options (options, allowed, G_N_ELEMENTS (allowed), error);
+  if (filtered == NULL)
+    return NULL;
+
+  g_variant_lookup (filtered, "thinking", "&s", &thinking);
+  g_variant_lookup (filtered, "reasoning_effort", "&s", &effort);
+  g_variant_lookup (filtered, "include_reasoning", "b", &include_reasoning);
+  if ((thinking != NULL &&
+       !g_str_equal (thinking, "auto") &&
+       !g_str_equal (thinking, "on") &&
+       !g_str_equal (thinking, "off")) ||
+      (effort != NULL && (*effort == '\0' ||
+                         (thinking != NULL && g_str_equal (thinking, "off")))))
+    {
+      g_set_error_literal (error, G_DBUS_ERROR, G_DBUS_ERROR_INVALID_ARGS,
+                            "Invalid or conflicting reasoning options");
+      return NULL;
+    }
+
+  if (!backend_v2)
+    {
+      if (thinking != NULL || effort != NULL || include_reasoning)
+        {
+          g_set_error_literal (error, G_DBUS_ERROR, G_DBUS_ERROR_NOT_SUPPORTED,
+                                "The selected backend does not support reasoning controls");
+          return NULL;
+        }
+      return guided ? model_token_options_from_vardict (options, error)
+                    : model_response_options_from_vardict (options, error);
+    }
+
+  g_variant_dict_init (&values, filtered);
+  g_variant_dict_remove (&values, "handle_token");
+  if (guided)
+    {
+      g_variant_dict_remove (&values, "source_language_hint");
+      g_variant_dict_remove (&values, "target_language_hint");
+    }
+  /* Retain legacy defaults unless callers explicitly select reasoning policy. */
+  if (thinking == NULL && effort == NULL && !g_variant_dict_contains (&values, "temperature"))
+    g_variant_dict_insert (&values, "temperature", "d", 0.7);
+
+  return g_variant_ref_sink (g_variant_dict_end (&values));
+}
+
+GVariant *
 model_speech_options_from_vardict (GVariant  *options,
                                    GError   **error)
 {
@@ -809,6 +880,7 @@ model_request_free (ModelRequest *request)
   g_clear_pointer (&request->terminal, dex_unref);
   g_clear_pointer (&request->closed, dex_unref);
   g_clear_pointer (&request->resources, model_request_resources_unref);
+  g_clear_pointer (&request->results, g_variant_unref);
   g_clear_object (&request->request);
   g_clear_object (&request->session);
   g_clear_object (&request->app_info);
@@ -842,7 +914,7 @@ model_request_matches (ModelRequest *request,
                        const char   *request_handle,
                        const char   *session_handle)
 {
-  return !request->terminal_seen &&
+  return !request->stream_terminal_seen &&
          !request->closed_seen &&
          model_request_is_exported (request) &&
          !xdp_session_dex_is_closed (request->session) &&
@@ -919,11 +991,37 @@ model_request_connect_loading (ModelRequest *request)
 void
 model_request_mark_terminal (ModelRequest *request)
 {
+  request->stream_terminal_seen = TRUE;
+  if (request->expect_results && request->results == NULL)
+    return;
   if (request->terminal_seen)
     return;
 
   request->terminal_seen = TRUE;
   dex_promise_resolve_boolean (request->terminal, TRUE);
+}
+
+void
+model_request_expect_results (ModelRequest *request)
+{
+  request->expect_results = TRUE;
+}
+
+void
+model_request_set_results (ModelRequest *request,
+                           const char   *request_handle,
+                           const char   *session_handle,
+                           GVariant     *results)
+{
+  if (request->closed_seen || request->results != NULL ||
+      !model_request_is_exported (request) ||
+      xdp_session_dex_is_closed (request->session) ||
+      !g_str_equal (model_request_get_handle (request), request_handle) ||
+      !g_str_equal (request->session_handle, session_handle))
+    return;
+
+  request->results = g_variant_ref (results);
+  model_request_mark_terminal (request);
 }
 
 void
@@ -1095,7 +1193,7 @@ model_request_finish (ModelRequest *request,
 
   xdp_request_dex_emit_response (request->request,
                                  XDG_DESKTOP_PORTAL_RESPONSE_SUCCESS,
-                                 NULL);
+                                 request->results);
 }
 
 gboolean

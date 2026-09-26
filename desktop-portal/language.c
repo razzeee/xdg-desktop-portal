@@ -94,6 +94,47 @@ forward_token_received (XdpDbusImplLanguage *impl G_GNUC_UNUSED,
 }
 
 static void
+forward_reasoning_received (XdpDbusImplLanguage *impl G_GNUC_UNUSED,
+                             const char          *request_handle,
+                             const char          *session_handle,
+                             const char          *text,
+                             ModelRequest        *request)
+{
+  if (!model_request_matches (request, request_handle, session_handle))
+    return;
+  model_request_emit_signal (request, "ReasoningReceived",
+                              g_variant_new ("(oos)", request_handle, session_handle, text));
+}
+
+static void
+forward_generation_completed (XdpDbusImplLanguage *impl G_GNUC_UNUSED,
+                               const char          *request_handle,
+                               const char          *session_handle,
+                               GVariant            *metadata,
+                               ModelRequest        *request)
+{
+  model_request_set_results (request, request_handle, session_handle, metadata);
+}
+
+static void
+connect_generation_signals (Language     *language,
+                             ModelRequest *request,
+                             GVariant     *options)
+{
+  gboolean include_reasoning = FALSE;
+
+  if (xdp_dbus_impl_language_get_version (language->impl) < 2)
+    return;
+  model_request_expect_results (request);
+  model_request_connect_signal (request, "generation-completed",
+                                 G_CALLBACK (forward_generation_completed));
+  g_variant_lookup (options, "include_reasoning", "b", &include_reasoning);
+  if (include_reasoning)
+    model_request_connect_signal (request, "reasoning-received",
+                                   G_CALLBACK (forward_reasoning_received));
+}
+
+static void
 forward_guided_snapshot_received (XdpDbusImplLanguage *impl G_GNUC_UNUSED,
                                   const char          *request_handle,
                                   const char          *session_handle,
@@ -339,6 +380,56 @@ handle_language_prewarm (XdpDbusLanguage       *object,
 }
 
 static gboolean
+handle_language_get_reasoning_capabilities (XdpDbusLanguage       *object,
+                                            GDBusMethodInvocation *invocation,
+                                            const char            *arg_session_handle,
+                                            GVariant              *arg_options)
+{
+  Language *language = (Language *) object;
+  XdpAppInfo *app_info = xdp_invocation_get_app_info (invocation);
+  g_autoptr(ModelSession) session = NULL;
+  g_autoptr(ModelRequest) request = NULL;
+  g_autoptr(GError) error = NULL;
+  DexFuture *call_future;
+
+  session = model_session_lookup (language->sessions, invocation, arg_session_handle);
+  if (session == NULL)
+    return G_DBUS_METHOD_INVOCATION_HANDLED;
+  if (!model_session_ensure_use_case (invocation, session, "GetReasoningCapabilities",
+                                      language_generation_use_cases))
+    return G_DBUS_METHOD_INVOCATION_HANDLED;
+  if (xdp_dbus_impl_language_get_version (language->impl) < 2)
+    {
+      g_dbus_method_invocation_return_error_literal (invocation, G_DBUS_ERROR,
+                                                      G_DBUS_ERROR_NOT_SUPPORTED,
+                                                      "The selected backend does not support reasoning discovery");
+      return G_DBUS_METHOD_INVOCATION_HANDLED;
+    }
+  if (!model_prewarm_options_validate (arg_options, &error))
+    {
+      g_dbus_method_invocation_return_gerror (invocation, error);
+      return G_DBUS_METHOD_INVOCATION_HANDLED;
+    }
+  request = model_request_new (language->context, app_info,
+                                G_DBUS_INTERFACE_SKELETON (language),
+                                G_DBUS_PROXY (language->impl),
+                                model_session_get_session (session), arg_options, &error);
+  if (request == NULL)
+    {
+      g_dbus_method_invocation_return_gerror (invocation, error);
+      return G_DBUS_METHOD_INVOCATION_HANDLED;
+    }
+  model_request_connect_loading (request);
+  connect_generation_signals (language, request, arg_options);
+  call_future = xdp_dbus_impl_language_call_get_reasoning_capabilities_future (
+    language->impl, model_request_get_handle (request), model_request_get_session_handle (request));
+  xdp_dbus_language_complete_get_reasoning_capabilities (object, invocation,
+                                                        model_request_get_handle (request));
+  model_request_finish (request, call_future, TRUE);
+  return G_DBUS_METHOD_INVOCATION_HANDLED;
+}
+
+static gboolean
 handle_language_stream_response (XdpDbusLanguage       *object,
                                  GDBusMethodInvocation *invocation,
                                  GUnixFDList           *fd_list,
@@ -370,7 +461,8 @@ handle_language_stream_response (XdpDbusLanguage       *object,
                                       language_generation_use_cases))
     return G_DBUS_METHOD_INVOCATION_HANDLED;
 
-  options = model_response_options_from_vardict (arg_options, &error);
+  options = model_generation_options_from_vardict (arg_options, FALSE,
+              xdp_dbus_impl_language_get_version (language->impl) >= 2, &error);
   if (options == NULL)
     {
       g_dbus_method_invocation_return_gerror (invocation, error);
@@ -405,7 +497,14 @@ handle_language_stream_response (XdpDbusLanguage       *object,
   model_request_connect_signal (request,
                                 "token-received",
                                 G_CALLBACK (forward_token_received));
-  call_future = xdp_dbus_impl_language_call_stream_response_future (
+  connect_generation_signals (language, request, arg_options);
+  if (xdp_dbus_impl_language_get_version (language->impl) >= 2)
+    call_future = xdp_dbus_impl_language_call_stream_response2_future (
+      language->impl, model_request_get_handle (request),
+      model_request_get_session_handle (request),
+      arg_input_json, sealed_media_fds, options, sealed_fd_list);
+  else
+    call_future = xdp_dbus_impl_language_call_stream_response_future (
     language->impl,
     model_request_get_handle (request),
     model_request_get_session_handle (request),
@@ -460,7 +559,8 @@ handle_language_stream_respond_guided (XdpDbusLanguage       *object,
                                       language_generation_use_cases))
     return G_DBUS_METHOD_INVOCATION_HANDLED;
 
-  options = model_token_options_from_vardict (arg_options, &error);
+  options = model_generation_options_from_vardict (arg_options, TRUE,
+              xdp_dbus_impl_language_get_version (language->impl) >= 2, &error);
   if (options == NULL)
     {
       g_dbus_method_invocation_return_gerror (invocation, error);
@@ -498,7 +598,14 @@ handle_language_stream_respond_guided (XdpDbusLanguage       *object,
   model_request_connect_signal (request,
                                 "guided-tool-calls-received",
                                 G_CALLBACK (forward_guided_tool_calls_received));
-  call_future = xdp_dbus_impl_language_call_stream_respond_guided_future (
+  connect_generation_signals (language, request, arg_options);
+  if (xdp_dbus_impl_language_get_version (language->impl) >= 2)
+    call_future = xdp_dbus_impl_language_call_stream_respond_guided2_future (
+      language->impl, model_request_get_handle (request),
+      model_request_get_session_handle (request),
+      arg_prompt, sealed_media_fds, arg_fields, arg_tools, options, sealed_fd_list);
+  else
+    call_future = xdp_dbus_impl_language_call_stream_respond_guided_future (
     language->impl,
     model_request_get_handle (request),
     model_request_get_session_handle (request),
@@ -558,7 +665,8 @@ handle_language_stream_submit_tool_results_guided (
         language_generation_use_cases))
     return G_DBUS_METHOD_INVOCATION_HANDLED;
 
-  options = model_token_options_from_vardict (arg_options, &error);
+  options = model_generation_options_from_vardict (arg_options, TRUE,
+              xdp_dbus_impl_language_get_version (language->impl) >= 2, &error);
   if (options == NULL)
     {
       g_dbus_method_invocation_return_gerror (invocation, error);
@@ -596,8 +704,14 @@ handle_language_stream_submit_tool_results_guided (
   model_request_connect_signal (request,
                                 "guided-tool-calls-received",
                                 G_CALLBACK (forward_guided_tool_calls_received));
-  call_future =
-    xdp_dbus_impl_language_call_stream_submit_tool_results_guided_future (
+  connect_generation_signals (language, request, arg_options);
+  if (xdp_dbus_impl_language_get_version (language->impl) >= 2)
+    call_future = xdp_dbus_impl_language_call_stream_submit_tool_results_guided2_future (
+      language->impl, model_request_get_handle (request),
+      model_request_get_session_handle (request),
+      arg_prompt, sealed_media_fds, arg_results, arg_fields, arg_tools, options, sealed_fd_list);
+  else
+    call_future = xdp_dbus_impl_language_call_stream_submit_tool_results_guided_future (
       language->impl,
       model_request_get_handle (request),
       model_request_get_session_handle (request),
@@ -692,6 +806,7 @@ language_iface_init (XdpDbusLanguageIface *iface)
   iface->handle_get_use_case_availability = handle_language_get_use_case_availability;
   iface->handle_create_session = handle_language_create_session;
   iface->handle_prewarm = handle_language_prewarm;
+  iface->handle_get_reasoning_capabilities = handle_language_get_reasoning_capabilities;
   iface->handle_stream_response = handle_language_stream_response;
   iface->handle_stream_respond_guided = handle_language_stream_respond_guided;
   iface->handle_stream_submit_tool_results_guided = handle_language_stream_submit_tool_results_guided;
@@ -734,7 +849,7 @@ language_new (XdpContext          *context,
   language->sessions = model_session_store_new ();
 
   g_dbus_proxy_set_default_timeout (G_DBUS_PROXY (language->impl), G_MAXINT);
-  xdp_dbus_language_set_version (XDP_DBUS_LANGUAGE (language), 1);
+  xdp_dbus_language_set_version (XDP_DBUS_LANGUAGE (language), 2);
 
   return language;
 }
