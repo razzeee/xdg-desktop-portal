@@ -128,6 +128,7 @@ template_files = [
   'templates/globalshortcuts.py',
   'templates/inhibit.py',
   'templates/inputcapture.py',
+  'templates/language.py',
   'templates/lockdown.py',
   'templates/notification.py',
   'templates/print.py',

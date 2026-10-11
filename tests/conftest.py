@@ -212,6 +212,7 @@ def xdg_desktop_portal_dir_default_files() -> dict[str, bytes]:
         "org.freedesktop.impl.portal.GlobalShortcuts",
         "org.freedesktop.impl.portal.Inhibit",
         "org.freedesktop.impl.portal.InputCapture",
+        "org.freedesktop.impl.portal.Language",
         "org.freedesktop.impl.portal.Lockdown",
         "org.freedesktop.impl.portal.Notification",
         "org.freedesktop.impl.portal.Print",
