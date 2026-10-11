@@ -207,49 +207,6 @@ def Prewarm(self, handle, session_handle, cb_success, cb_error):
     _schedule_signals(self, handle, session_handle, ())
 
 
-@dbus.service.method(
-    MAIN_IFACE,
-    in_signature="oosah(xdsss)",
-    out_signature="",
-    async_callbacks=("cb_success", "cb_error"),
-)
-def StreamResponse(
-    self,
-    handle,
-    session_handle,
-    input_json,
-    media_fds,
-    options,
-    cb_success,
-    cb_error,
-):
-    logger.debug(
-        f"StreamResponse({handle}, {session_handle}, {input_json}, {media_fds}, "
-        f"{options})"
-    )
-    assert session_handle in self.language_sessions
-
-    request = _new_request(self, handle, cb_success, cb_error)
-    _complete_request(self, request)
-    _schedule_signals(
-        self,
-        handle,
-        session_handle,
-        (
-            (
-                "TokenReceived",
-                "sb",
-                (dbus.String("Hello"), dbus.Boolean(False)),
-            ),
-            (
-                "TokenReceived",
-                "sb",
-                (dbus.String(" world"), dbus.Boolean(True)),
-            ),
-        ),
-    )
-
-
 def _guided_signals():
     tool_calls = dbus.Array(
         [
@@ -341,7 +298,7 @@ def GetReasoningCapabilities(self, handle, session_handle, cb_success, cb_error)
     out_signature="",
     async_callbacks=("cb_success", "cb_error"),
 )
-def StreamResponse2(
+def StreamResponse(
     self, handle, session_handle, input_json, media_fds, options, cb_success, cb_error
 ):
     assert session_handle in self.language_sessions
@@ -366,63 +323,6 @@ def StreamResponse2(
     out_signature="",
     async_callbacks=("cb_success", "cb_error"),
 )
-def StreamRespondGuided2(
-    self,
-    handle,
-    session_handle,
-    prompt,
-    media_fds,
-    fields,
-    tools,
-    options,
-    cb_success,
-    cb_error,
-):
-    assert session_handle in self.language_sessions
-    _complete_request(self, _new_request(self, handle, cb_success, cb_error))
-    _schedule_signals(
-        self,
-        handle,
-        session_handle,
-        (*_guided_signals(), _completion_signal("tool_calls")),
-    )
-
-
-@dbus.service.method(
-    MAIN_IFACE,
-    in_signature="oosaha(sss)a(sssb)a(sss)a{sv}",
-    out_signature="",
-    async_callbacks=("cb_success", "cb_error"),
-)
-def StreamSubmitToolResultsGuided2(
-    self,
-    handle,
-    session_handle,
-    prompt,
-    media_fds,
-    results,
-    fields,
-    tools,
-    options,
-    cb_success,
-    cb_error,
-):
-    assert session_handle in self.language_sessions
-    _complete_request(self, _new_request(self, handle, cb_success, cb_error))
-    _schedule_signals(
-        self,
-        handle,
-        session_handle,
-        (*_guided_signals(), _completion_signal("tool_calls")),
-    )
-
-
-@dbus.service.method(
-    MAIN_IFACE,
-    in_signature="oosaha(sssb)a(sss)(xds)",
-    out_signature="",
-    async_callbacks=("cb_success", "cb_error"),
-)
 def StreamRespondGuided(
     self,
     handle,
@@ -435,25 +335,23 @@ def StreamRespondGuided(
     cb_success,
     cb_error,
 ):
-    logger.debug(
-        f"StreamRespondGuided({handle}, {session_handle}, {prompt}, {media_fds}, "
-        f"{fields}, {tools}, {options})"
-    )
     assert session_handle in self.language_sessions
-
-    request = _new_request(self, handle, cb_success, cb_error)
-    _complete_request(self, request)
+    _complete_request(self, _new_request(self, handle, cb_success, cb_error))
     _schedule_signals(
         self,
         handle,
         session_handle,
-        _guided_signals(),
+        (
+            ("ReasoningReceived", "s", (dbus.String("Private reasoning"),)),
+            *_guided_signals(),
+            _completion_signal("tool_calls"),
+        ),
     )
 
 
 @dbus.service.method(
     MAIN_IFACE,
-    in_signature="oosaha(sss)a(sssb)a(sss)(xds)",
+    in_signature="oosaha(sss)a(sssb)a(sss)a{sv}",
     out_signature="",
     async_callbacks=("cb_success", "cb_error"),
 )
@@ -470,19 +368,17 @@ def StreamSubmitToolResultsGuided(
     cb_success,
     cb_error,
 ):
-    logger.debug(
-        f"StreamSubmitToolResultsGuided({handle}, {session_handle}, {prompt}, "
-        f"{media_fds}, {results}, {fields}, {tools}, {options})"
-    )
     assert session_handle in self.language_sessions
-
-    request = _new_request(self, handle, cb_success, cb_error)
-    _complete_request(self, request)
+    _complete_request(self, _new_request(self, handle, cb_success, cb_error))
     _schedule_signals(
         self,
         handle,
         session_handle,
-        _guided_signals(),
+        (
+            ("ReasoningReceived", "s", (dbus.String("Private reasoning"),)),
+            *_guided_signals(),
+            _completion_signal("tool_calls"),
+        ),
     )
 
 

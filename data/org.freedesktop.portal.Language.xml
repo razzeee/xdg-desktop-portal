@@ -35,7 +35,9 @@
       StreamRespondGuided and StreamSubmitToolResultsGuided accept
       ``maximum_response_tokens``, ``temperature``, and ``execution_mode``.
       ``maximum_response_tokens`` defaults to 512 and ``temperature`` defaults
-      to 0.7. Language hints default to empty strings.
+      to 0.7 unless ``thinking`` or ``reasoning_effort`` is explicitly supplied,
+      in which case an omitted temperature is left to the backend's reasoning
+      policy. Language hints default to empty strings.
       ``execution_mode`` defaults to ``interactive`` and may also be
       ``background``. Background requests may be delayed, deprioritized,
       preempted, or cancelled to protect interactive work and reduce system
@@ -43,14 +45,14 @@
       StreamEmbed accepts only ``execution_mode`` besides standard request
       options.
 
-      Version 2 adds optional ``thinking`` (``auto``, ``on``, ``off``),
+      Generation options include optional ``thinking`` (``auto``, ``on``, ``off``),
       ``reasoning_effort`` (a model-supported string), and ``include_reasoning``
-      (boolean, default false) to generation options. Explicit unsupported
+      (boolean, default false). Explicit unsupported
       controls fail rather than being ignored. ReasoningReceived carries opted-in
       reasoning separately from answer text. Successful Request.Response results
       may include ``finish_reason`` and a ``usage`` vardict with int64 token counts.
 
-      This documentation describes version 2 of this interface.
+      This documentation describes version 1 of this interface.
   -->
   <interface name="org.freedesktop.portal.Language">
     <!--
@@ -62,14 +64,23 @@
         Prepares the assigned runtime if needed. Successful Request.Response
         results contain thinking_modes and reasoning_efforts as string arrays,
         and reasoning_output as a boolean. Empty arrays denote unsupported or
-        unverified controls. Available since version 2.
+        unverified controls.
     -->
     <method name="GetReasoningCapabilities">
       <arg type="o" name="session_handle" direction="in"/>
+      <annotation name="org.qtproject.QtDBus.QtTypeName.In1" value="QVariantMap"/>
       <arg type="a{sv}" name="options" direction="in"/>
       <arg type="o" name="handle" direction="out"/>
     </method>
-    <!-- Reasoning text is emitted only for requests with include_reasoning=true. -->
+    <!--
+        ReasoningReceived:
+        @request_handle: Request that produced this event
+        @session_handle: Language session used by the request
+        @text: Next reasoning text fragment
+
+        Emitted separately from answer payloads only for requests with
+        ``include_reasoning`` set to true, and only to the requesting caller.
+    -->
     <signal name="ReasoningReceived">
       <arg type="o" name="request_handle"/>
       <arg type="o" name="session_handle"/>

@@ -80,22 +80,6 @@ validate_execution_mode (const char  *key,
   return FALSE;
 }
 
-static const XdpOptionKey response_options[] = {
-  { "handle_token", G_VARIANT_TYPE_STRING, NULL },
-  { "maximum_response_tokens", G_VARIANT_TYPE_INT64, NULL },
-  { "temperature", G_VARIANT_TYPE_DOUBLE, NULL },
-  { "source_language_hint", G_VARIANT_TYPE_STRING, NULL },
-  { "target_language_hint", G_VARIANT_TYPE_STRING, NULL },
-  { "execution_mode", G_VARIANT_TYPE_STRING, validate_execution_mode },
-};
-
-static const XdpOptionKey token_options[] = {
-  { "handle_token", G_VARIANT_TYPE_STRING, NULL },
-  { "maximum_response_tokens", G_VARIANT_TYPE_INT64, NULL },
-  { "temperature", G_VARIANT_TYPE_DOUBLE, NULL },
-  { "execution_mode", G_VARIANT_TYPE_STRING, validate_execution_mode },
-};
-
 static const XdpOptionKey create_session_options[] = {
   { "handle_token", G_VARIANT_TYPE_STRING, NULL },
   { "session_handle_token", G_VARIANT_TYPE_STRING, NULL },
@@ -411,64 +395,6 @@ model_prewarm_options_validate (GVariant  *options,
 }
 
 GVariant *
-model_response_options_from_vardict (GVariant  *options,
-                                     GError   **error)
-{
-  g_autoptr(GVariant) filtered = NULL;
-  gint64 maximum_response_tokens = 512;
-  double temperature = 0.7;
-  const char *source_language_hint = "";
-  const char *target_language_hint = "";
-  const char *execution_mode = "interactive";
-
-  filtered = filter_options (options,
-                             response_options,
-                             G_N_ELEMENTS (response_options),
-                             error);
-  if (filtered == NULL)
-    return NULL;
-
-  g_variant_lookup (filtered, "maximum_response_tokens", "x", &maximum_response_tokens);
-  g_variant_lookup (filtered, "temperature", "d", &temperature);
-  g_variant_lookup (filtered, "source_language_hint", "&s", &source_language_hint);
-  g_variant_lookup (filtered, "target_language_hint", "&s", &target_language_hint);
-  g_variant_lookup (filtered, "execution_mode", "&s", &execution_mode);
-
-  return g_variant_ref_sink (g_variant_new ("(xdsss)",
-                                            maximum_response_tokens,
-                                            temperature,
-                                            source_language_hint,
-                                            target_language_hint,
-                                            execution_mode));
-}
-
-GVariant *
-model_token_options_from_vardict (GVariant  *options,
-                                  GError   **error)
-{
-  g_autoptr(GVariant) filtered = NULL;
-  gint64 maximum_response_tokens = 512;
-  double temperature = 0.7;
-  const char *execution_mode = "interactive";
-
-  filtered = filter_options (options,
-                             token_options,
-                             G_N_ELEMENTS (token_options),
-                             error);
-  if (filtered == NULL)
-    return NULL;
-
-  g_variant_lookup (filtered, "maximum_response_tokens", "x", &maximum_response_tokens);
-  g_variant_lookup (filtered, "temperature", "d", &temperature);
-  g_variant_lookup (filtered, "execution_mode", "&s", &execution_mode);
-
-  return g_variant_ref_sink (g_variant_new ("(xds)",
-                                            maximum_response_tokens,
-                                            temperature,
-                                            execution_mode));
-}
-
-GVariant *
 model_request_options_from_vardict (GVariant  *options,
                                     GError   **error)
 {
@@ -489,7 +415,6 @@ model_request_options_from_vardict (GVariant  *options,
 GVariant *
 model_generation_options_from_vardict (GVariant  *options,
                                        gboolean   guided,
-                                       gboolean   backend_v2,
                                        GError   **error)
 {
   const XdpOptionKey allowed[] = {
@@ -507,7 +432,6 @@ model_generation_options_from_vardict (GVariant  *options,
   g_auto(GVariantDict) values = G_VARIANT_DICT_INIT (NULL);
   const char *thinking = NULL;
   const char *effort = NULL;
-  gboolean include_reasoning = FALSE;
 
   filtered = filter_options (options, allowed, G_N_ELEMENTS (allowed), error);
   if (filtered == NULL)
@@ -515,7 +439,6 @@ model_generation_options_from_vardict (GVariant  *options,
 
   g_variant_lookup (filtered, "thinking", "&s", &thinking);
   g_variant_lookup (filtered, "reasoning_effort", "&s", &effort);
-  g_variant_lookup (filtered, "include_reasoning", "b", &include_reasoning);
   if ((thinking != NULL &&
        !g_str_equal (thinking, "auto") &&
        !g_str_equal (thinking, "on") &&
@@ -526,18 +449,6 @@ model_generation_options_from_vardict (GVariant  *options,
       g_set_error_literal (error, G_DBUS_ERROR, G_DBUS_ERROR_INVALID_ARGS,
                             "Invalid or conflicting reasoning options");
       return NULL;
-    }
-
-  if (!backend_v2)
-    {
-      if (thinking != NULL || effort != NULL || include_reasoning)
-        {
-          g_set_error_literal (error, G_DBUS_ERROR, G_DBUS_ERROR_NOT_SUPPORTED,
-                                "The selected backend does not support reasoning controls");
-          return NULL;
-        }
-      return guided ? model_token_options_from_vardict (options, error)
-                    : model_response_options_from_vardict (options, error);
     }
 
   g_variant_dict_init (&values, filtered);

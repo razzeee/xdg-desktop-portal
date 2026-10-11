@@ -8,50 +8,65 @@
   <!--
       org.freedesktop.impl.portal.Language:
       @short_description: Local language model backend interface
+
+      This documentation describes version 1 of this interface. Generation
+      methods use extensible options vardicts, emit opted-in ReasoningReceived
+      separately from answer payloads, and emit GenerationCompleted metadata
+      after the terminal payload signal and before the method returns.
+
+      Generation options have the same keys, types, and defaults as
+      :ref:`org.freedesktop.portal.Language`, except that the frontend consumes
+      ``handle_token``. Backends must reject explicitly requested reasoning
+      controls that the assigned model does not support.
   -->
   <interface name="org.freedesktop.impl.portal.Language">
-    <!-- Version 2 uses extensible options and reports completion metadata. -->
-    <method name="StreamResponse2">
-      <annotation name="org.gtk.GDBus.C.UnixFD" value="true"/>
-      <arg type="o" name="handle" direction="in"/>
-      <arg type="o" name="session_handle" direction="in"/>
-      <arg type="s" name="input_json" direction="in"/>
-      <arg type="ah" name="media_fds" direction="in"/>
-      <arg type="a{sv}" name="options" direction="in"/>
-    </method>
-    <method name="StreamRespondGuided2">
-      <annotation name="org.gtk.GDBus.C.UnixFD" value="true"/>
-      <arg type="o" name="handle" direction="in"/>
-      <arg type="o" name="session_handle" direction="in"/>
-      <arg type="s" name="prompt" direction="in"/>
-      <arg type="ah" name="media_fds" direction="in"/>
-      <arg type="a(sssb)" name="fields" direction="in"/>
-      <arg type="a(sss)" name="tools" direction="in"/>
-      <arg type="a{sv}" name="options" direction="in"/>
-    </method>
-    <method name="StreamSubmitToolResultsGuided2">
-      <annotation name="org.gtk.GDBus.C.UnixFD" value="true"/>
-      <arg type="o" name="handle" direction="in"/>
-      <arg type="o" name="session_handle" direction="in"/>
-      <arg type="s" name="prompt" direction="in"/>
-      <arg type="ah" name="media_fds" direction="in"/>
-      <arg type="a(sss)" name="results" direction="in"/>
-      <arg type="a(sssb)" name="fields" direction="in"/>
-      <arg type="a(sss)" name="tools" direction="in"/>
-      <arg type="a{sv}" name="options" direction="in"/>
-    </method>
+    <!--
+        GetReasoningCapabilities:
+        @handle: Request handle owned by the frontend
+        @session_handle: Language generation session handle returned by CreateSession
+
+        Prepares the assigned runtime if needed and emits GenerationCompleted
+        before returning. Its metadata contains ``thinking_modes`` and
+        ``reasoning_efforts`` (string arrays), and ``reasoning_output`` (boolean).
+        Empty arrays denote unsupported or unverified controls. This operation
+        emits no terminal stream payload signal.
+    -->
     <method name="GetReasoningCapabilities">
       <arg type="o" name="handle" direction="in"/>
       <arg type="o" name="session_handle" direction="in"/>
     </method>
+    <!--
+        ReasoningReceived:
+        @request_handle: Frontend request that produced this event
+        @session_handle: Language session used by the request
+        @text: Next reasoning text fragment
+
+        Emitted separately from answer payloads only when ``include_reasoning``
+        is true, and before the terminal stream payload signal.
+    -->
     <signal name="ReasoningReceived">
       <arg type="o" name="request_handle"/>
       <arg type="o" name="session_handle"/>
       <arg type="s" name="text"/>
     </signal>
+    <!--
+        GenerationCompleted:
+        @request_handle: Frontend request that produced this event
+        @session_handle: Language session used by the request
+        @metadata: Results forwarded in the successful Request.Response vardict
+
+        Emitted exactly once on successful generation, after the terminal
+        stream payload signal and before returning from the method, even when
+        @metadata is empty. Results may include ``finish_reason`` (string) and
+        ``usage`` (vardict with int64 token counts).
+
+        GetReasoningCapabilities also emits this signal, with the capability
+        results described above, without a preceding stream payload.
+    -->
     <signal name="GenerationCompleted">
       <arg type="o" name="request_handle"/>
       <arg type="o" name="session_handle"/>
+      <annotation name="org.qtproject.QtDBus.QtTypeName.Out2" value="QVariantMap"/>
       <arg type="a{sv}" name="metadata"/>
     </signal>
     <!--
@@ -119,7 +134,7 @@
         @session_handle: Language generation session handle returned by CreateSession
         @input_json: JSON content-part shorthand or role messages to answer
         @media_fds: Unix fds referenced by media content parts
-        @options: ``(maximum_response_tokens, temperature, source_language_hint, target_language_hint, execution_mode)``; defaults are ``(512, 0.7, "", "", "interactive")``
+        @options: Extensible generation options vardict, including optional reasoning controls
 
         ``input_json`` must be a JSON array. A content-part shorthand array is
         treated as one user message. A role-message array contains objects with
@@ -134,8 +149,8 @@
       <arg type="s" name="input_json" direction="in"/>
       <annotation name="org.qtproject.QtDBus.QtTypeName.In3" value="QList&lt;QDBusUnixFileDescriptor&gt;"/>
       <arg type="ah" name="media_fds" direction="in"/>
-      <annotation name="org.qtproject.QtDBus.QtTypeName.In4" value="std::tuple&lt;qlonglong,double,QString,QString,QString&gt;"/>
-      <arg type="(xdsss)" name="options" direction="in"/>
+      <annotation name="org.qtproject.QtDBus.QtTypeName.In4" value="QVariantMap"/>
+      <arg type="a{sv}" name="options" direction="in"/>
     </method>
 
     <!--
@@ -146,7 +161,7 @@
         @media_fds: Unix fds referenced by media content parts in @prompt
         @fields: Guided output fields as ``(name, kind, description, required)`` structs
         @tools: Tool definitions as ``(name, description, schema_json)`` structs; ``schema_json`` contains the JSON Schema for tool arguments
-        @options: ``(maximum_response_tokens, temperature, execution_mode)``; defaults are ``(512, 0.7, "interactive")``
+        @options: Extensible generation options vardict, including optional reasoning controls
 
         Stream payloads are emitted as GuidedSnapshotReceived and/or
         GuidedToolCallsReceived signals while this call is in progress.
@@ -162,8 +177,8 @@
       <arg type="a(sssb)" name="fields" direction="in"/>
       <annotation name="org.qtproject.QtDBus.QtTypeName.In5" value="QList&lt;std::tuple&lt;QString,QString,QString&gt;&gt;"/>
       <arg type="a(sss)" name="tools" direction="in"/>
-      <annotation name="org.qtproject.QtDBus.QtTypeName.In6" value="std::tuple&lt;qlonglong,double,QString&gt;"/>
-      <arg type="(xds)" name="options" direction="in"/>
+      <annotation name="org.qtproject.QtDBus.QtTypeName.In6" value="QVariantMap"/>
+      <arg type="a{sv}" name="options" direction="in"/>
     </method>
 
     <!--
@@ -175,7 +190,7 @@
         @results: Tool results as ``(id, content, content_json)`` structs
         @fields: Guided output fields as ``(name, kind, description, required)`` structs
         @tools: Tool definitions as ``(name, description, schema_json)`` structs; ``schema_json`` contains the JSON Schema for tool arguments
-        @options: ``(maximum_response_tokens, temperature, execution_mode)``; defaults are ``(512, 0.7, "interactive")``
+        @options: Extensible generation options vardict, including optional reasoning controls
 
         Stream payloads are emitted as GuidedSnapshotReceived and/or
         GuidedToolCallsReceived signals while this call is in progress.
@@ -193,8 +208,8 @@
       <arg type="a(sssb)" name="fields" direction="in"/>
       <annotation name="org.qtproject.QtDBus.QtTypeName.In6" value="QList&lt;std::tuple&lt;QString,QString,QString&gt;&gt;"/>
       <arg type="a(sss)" name="tools" direction="in"/>
-      <annotation name="org.qtproject.QtDBus.QtTypeName.In7" value="std::tuple&lt;qlonglong,double,QString&gt;"/>
-      <arg type="(xds)" name="options" direction="in"/>
+      <annotation name="org.qtproject.QtDBus.QtTypeName.In7" value="QVariantMap"/>
+      <arg type="a{sv}" name="options" direction="in"/>
     </method>
 
     <!--

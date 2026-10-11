@@ -61,12 +61,6 @@ gboolean model_availability_options_validate (GVariant  *options,
 gboolean model_prewarm_options_validate (GVariant  *options,
                                           GError   **error);
 
-GVariant * model_response_options_from_vardict (GVariant  *options,
-                                                 GError   **error);
-
-GVariant * model_token_options_from_vardict (GVariant  *options,
-                                              GError   **error);
-
 GVariant * model_request_options_from_vardict (GVariant  *options,
                                                 GError   **error);
 
@@ -135,7 +129,6 @@ void model_request_set_results (ModelRequest *request,
 
 GVariant *model_generation_options_from_vardict (GVariant *options,
                                                  gboolean guided,
-                                                 gboolean backend_v2,
                                                  GError **error);
 
 void model_request_take_sealed_fd (ModelRequest *request,
