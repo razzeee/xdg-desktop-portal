@@ -2,7 +2,7 @@
 # SPDX-FileCopyrightText: Copyright © the xdg-desktop-portal contributors
 
 env:
-  TESTS_TIMEOUT: 10 # in minutes
+  TESTS_TIMEOUT: 15 # in minutes; includes the serial model portal suite
 
 on:
   workflow_call:
