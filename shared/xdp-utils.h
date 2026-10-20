@@ -122,6 +122,8 @@ char * xdp_maybe_quote (const char *arg,
 char * xdp_maybe_quote_argv (const char *argv[],
                              gboolean    quote_escape);
 
+char * xdp_argv_to_desktop_exec (const char * const *argv);
+
 char * xdp_spawn (GError             **error,
                   const char          *argv0,
                   ...) G_GNUC_NULL_TERMINATED;

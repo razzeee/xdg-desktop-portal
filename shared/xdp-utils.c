@@ -516,6 +516,44 @@ xdp_maybe_quote_argv (const char *argv[],
   return g_string_free_and_steal (res);
 }
 
+/* Serialize raw arguments for a desktop entry's Exec key, not for a shell.
+ * The caller must use g_key_file_set_string() for the additional key-file
+ * escaping layer.
+ */
+char *
+xdp_argv_to_desktop_exec (const char * const *argv)
+{
+  g_autoptr(GString) exec = g_string_new (NULL);
+
+  for (size_t i = 0; argv[i] != NULL; i++)
+    {
+      const char *arg = argv[i];
+      gboolean quote = *arg == '\0' || strpbrk (arg, " \t\n\r\"'\\><~|&;$*?#()`") != NULL;
+
+      if (i > 0)
+        g_string_append_c (exec, ' ');
+
+      if (quote)
+        g_string_append_c (exec, '"');
+
+      for (const char *p = arg; *p != '\0'; p++)
+        {
+          /* Percent signs must not be interpreted as field codes. */
+          if (*p == '%')
+            g_string_append_c (exec, '%');
+          else if (quote && strchr ("\"`$\\", *p) != NULL)
+            g_string_append_c (exec, '\\');
+
+          g_string_append_c (exec, *p);
+        }
+
+      if (quote)
+        g_string_append_c (exec, '"');
+    }
+
+  return g_string_free_and_steal (g_steal_pointer (&exec));
+}
+
 typedef struct
 {
   GError    *error;

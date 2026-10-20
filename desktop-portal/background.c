@@ -783,7 +783,6 @@ enable_autostart_sync (XdpAppInfo          *app_info,
                        gboolean            *out_enabled,
                        GError             **error)
 {
-  GStrv exec = (GStrv)autostart_exec;
   g_autofree char *cmd = NULL;
   g_autofree char *file = NULL;
   g_autofree char *dir = NULL;
@@ -837,8 +836,8 @@ enable_autostart_sync (XdpAppInfo          *app_info,
                          "X-XDP-Autostart",
                          appid);
 
-  if (exec)
-    cmd = g_strjoinv (" ", exec);
+  if (autostart_exec)
+    cmd = xdp_argv_to_desktop_exec (autostart_exec);
 
   if (cmd)
     {

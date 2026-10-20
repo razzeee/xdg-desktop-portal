@@ -194,6 +194,38 @@ test_app_id_via_systemd_unit (void)
 }
 #endif /* HAVE_LIBSYSTEMD */
 
+static void
+test_argv_to_desktop_exec (void)
+{
+  const struct {
+    const char *arg;
+    const char *expected;
+  } cases[] = {
+    { "plain", "plain" },
+    { "--option=value", "--option=value" },
+    { "", "\"\"" },
+    { "two words", "\"two words\"" },
+    { "a\tb\nc\rd", "\"a\tb\nc\rd\"" },
+    { "a'b", "\"a'b\"" },
+    { "a\"b", "\"a\\\"b\"" },
+    { "a\\b\\", "\"a\\\\b\\\\\"" },
+    { "`$", "\"\\`\\$\"" },
+    { "><~|&;*?#()", "\"><~|&;*?#()\"" },
+    { "%f%u%%", "%%f%%u%%%%" },
+    { "100% complete", "\"100%% complete\"" },
+    { "日本語", "日本語" },
+  };
+
+  for (size_t i = 0; i < G_N_ELEMENTS (cases); i++)
+    {
+      const char *argv[] = { "/bin/true", cases[i].arg, NULL };
+      g_autofree char *exec = xdp_argv_to_desktop_exec (argv);
+      g_autofree char *expected = g_strconcat ("/bin/true ", cases[i].expected, NULL);
+
+      g_assert_cmpstr (exec, ==, expected);
+    }
+}
+
 int main (int argc, char **argv)
 {
   g_test_init (&argc, &argv, NULL);
@@ -202,6 +234,7 @@ int main (int argc, char **argv)
   g_test_add_func ("/parse-cgroup/systemd", test_parse_cgroup_systemd);
   g_test_add_func ("/parse-cgroup/not-snap", test_parse_cgroup_not_snap);
   g_test_add_func ("/alternate-doc-path", test_alternate_doc_path);
+  g_test_add_func ("/argv-to-desktop-exec", test_argv_to_desktop_exec);
 #if HAVE_LIBSYSTEMD
   g_test_add_func ("/app-id-via-systemd-unit", test_app_id_via_systemd_unit);
 #endif

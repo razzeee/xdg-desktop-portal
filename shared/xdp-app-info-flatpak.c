@@ -338,7 +338,7 @@ xdp_app_info_flatpak_validate_autostart (XdpAppInfo          *app_info,
   cmdv = rewrite_commandline (app_info_flatpak,
                               autostart_exec,
                               FALSE /* don't quote escape */);
-  cmd = g_strjoinv (" ", cmdv);
+  cmd = xdp_argv_to_desktop_exec ((const char * const *) cmdv);
 
   g_key_file_set_string (keyfile,
                          G_KEY_FILE_DESKTOP_GROUP,

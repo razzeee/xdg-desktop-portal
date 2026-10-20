@@ -45,6 +45,8 @@
 
           Commandline to use when autostarting at login. If this is not
           specified, the ``Exec`` key from the desktop file will be used.
+          Each array element is an unquoted argument; the first element is
+          the executable. No shell or desktop-entry escaping should be applied.
 
         * ``dbus-activatable`` (``b``)
 

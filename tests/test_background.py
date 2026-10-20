@@ -3,12 +3,14 @@
 #
 # This file is formatted with Python Black
 
+import json
 import os
+import sys
 from pathlib import Path
 
 import dbus
 import pytest
-from gi.repository import GLib
+from gi.repository import GioUnix, GLib
 
 import tests.xdp_utils as xdp
 
@@ -112,6 +114,67 @@ class TestBackground:
             assert exec == f"flatpak run --command=/bin/true {app_id} test"
         else:
             assert exec == "/bin/true test"
+
+    def test_autostart_argv(
+        self, portals, dbus_con, xdp_app_info, xdp_bin_path, tmp_path, monkeypatch
+    ):
+        if isinstance(xdp_app_info, (xdp.AppInfoSnap, xdp.AppInfoLinyaps)):
+            pytest.skip("Autostart is not supported")
+
+        output = tmp_path / "argv.json"
+        recorder = (
+            f"#!{sys.executable}\n"
+            "import json, sys\n"
+            "from pathlib import Path\n"
+            f"Path({str(output)!r}).write_text(json.dumps(sys.argv[1:]))\n"
+        )
+        executable = xdp_bin_path / "argv recorder.py"
+        executable.write_text(recorder)
+        executable.chmod(0o755)
+        args = [
+            "",
+            "two words",
+            "a\tb\nc\rd",
+            'double"quote',
+            "single'quote",
+            "back\\slash\\",
+            "`$HOME",
+            "><~|&;*?#()",
+            "%f%F%u%U%i%c%k%%",
+            "100% complete",
+            "--option=two words",
+            "日本語",
+        ]
+        commandline = [str(executable), *args]
+        expected = args
+        if isinstance(xdp_app_info, xdp.AppInfoFlatpak):
+            # Capture the rewritten launcher argv without running Flatpak.
+            (xdp_bin_path / "flatpak").write_text(recorder)
+            expected = [
+                "run",
+                f"--command={executable}",
+                xdp_app_info.app_id,
+                *args,
+            ]
+
+        background_intf = xdp.get_portal_iface(dbus_con, "Background")
+        response = xdp.Request(dbus_con, background_intf).call(
+            "RequestBackground",
+            parent_window="",
+            options={"autostart": True, "commandline": commandline},
+        )
+        assert response.response == 0
+        assert response.results["autostart"]
+
+        # Load the saved file so both key-file and Exec escaping are exercised.
+        monkeypatch.setenv("PATH", f"{xdp_bin_path}:{os.environ['PATH']}")
+        app_info = GioUnix.DesktopAppInfo.new_from_filename(
+            str(self.get_autostart_path(xdp_app_info.app_id))
+        )
+        assert app_info is not None
+        assert app_info.launch([], None)
+        xdp.wait_for(lambda: output.exists() and output.stat().st_size > 0)
+        assert json.loads(output.read_text()) == expected
 
     def test_autostart_disable(self, portals, dbus_con, xdp_app_info):
         app_id = xdp_app_info.app_id
