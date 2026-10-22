@@ -52,9 +52,72 @@
       reasoning separately from answer text. Successful Request.Response results
       may include ``finish_reason`` and a ``usage`` vardict with int64 token counts.
 
+      MeasureRequest measures request size before generation. The
+      ``response_schema`` string option for guided generation contains an object-root JSON Schema
+      and requires an empty ``fields`` array. It applies to both
+      StreamRespondGuided and StreamSubmitToolResultsGuided.
+
+      The supported schema subset requires a single ``type`` at every node:
+      object, array, string, number, integer, boolean, or null. Objects require
+      ``properties`` and optionally accept ``required`` and boolean
+      ``additionalProperties``. Arrays require ``items`` and optionally accept
+      ``minItems``/``maxItems``. Strings accept ``minLength``/``maxLength``
+      (Unicode code points); numbers and integers accept ``minimum``/``maximum``.
+      Scalar types accept nonempty ``enum`` arrays. All nodes accept a string
+      ``description``. Unsupported keywords, invalid schemas, schemas over
+      64 KiB, and nesting deeper than 16 are rejected before generation.
+      Snapshots are complete objects validated against the schema; schema
+      validity does not establish factual correctness.
+
       This documentation describes version 1 of this interface.
   -->
   <interface name="org.freedesktop.portal.Language">
+    <!--
+        MeasureRequest:
+        @session_handle: A language generation session owned by the caller
+        @input_json: Input using the selected generation method's conventions
+        @media_fds: Readable, sealable memfds referenced by the input
+        @guided: Whether to measure an initial guided-generation request
+        @fields: Guided fields; empty for ordinary generation or response_schema
+        @tools: Tool definitions; empty for ordinary generation
+        @options: The same generation options as the selected stream method, plus handle_token
+        @handle: Request handle
+
+        Measures an initial StreamResponse (guided=false) or StreamRespondGuided
+        (guided=true) request without generating output or modifying session
+        history. Instructions, template formatting, tools, and response
+        constraints are accounted for using the assigned runtime. This does not
+        measure StreamSubmitToolResultsGuided or retain the supplied input.
+
+        Successful Request.Response results contain ``input_tokens`` (int64,
+        nonnegative), ``context_window_tokens`` (int64, positive),
+        ``requested_output_tokens`` (int64, positive), and ``measurement_kind``
+        (string: ``exact`` or ``estimate``). Counts use the assigned runtime's
+        tokenizer; they are not portable between models. Input exceeding the
+        window can still be measured successfully. Apps should budget for input
+        plus requested output. Tool workflows can require additional subsequent
+        generation passes not covered by this initial-input measurement.
+
+        Measurement may start the runtime and is cancellable through Request.Close.
+        Unsupported input modalities or measurement operations fail rather than
+        return an incomplete count. The result is not a resource reservation or
+        a promise of successful generation.
+    -->
+    <method name="MeasureRequest">
+      <annotation name="org.gtk.GDBus.C.UnixFD" value="true"/>
+      <arg type="o" name="session_handle" direction="in"/>
+      <arg type="s" name="input_json" direction="in"/>
+      <annotation name="org.qtproject.QtDBus.QtTypeName.In2" value="QList&lt;QDBusUnixFileDescriptor&gt;"/>
+      <arg type="ah" name="media_fds" direction="in"/>
+      <arg type="b" name="guided" direction="in"/>
+      <annotation name="org.qtproject.QtDBus.QtTypeName.In4" value="QList&lt;std::tuple&lt;QString,QString,QString,bool&gt;&gt;"/>
+      <arg type="a(sssb)" name="fields" direction="in"/>
+      <annotation name="org.qtproject.QtDBus.QtTypeName.In5" value="QList&lt;std::tuple&lt;QString,QString,QString&gt;&gt;"/>
+      <arg type="a(sss)" name="tools" direction="in"/>
+      <annotation name="org.qtproject.QtDBus.QtTypeName.In6" value="QVariantMap"/>
+      <arg type="a{sv}" name="options" direction="in"/>
+      <arg type="o" name="handle" direction="out"/>
+    </method>
     <!--
         GetReasoningCapabilities:
         @session_handle: A language generation session owned by the caller
