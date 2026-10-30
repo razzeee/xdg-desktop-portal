@@ -102,6 +102,7 @@ tests = {
   'inputcapture': {},
   'location': {'enabled': have_geoclue},
   'memorymonitor': {},
+  'model_portals': {'is_parallel': false},
   'notification': {'timeout': 225},
   'openuri': {},
   'permission_store': {},
@@ -130,6 +131,7 @@ template_files = [
   'templates/globalshortcuts.py',
   'templates/inhibit.py',
   'templates/inputcapture.py',
+  'templates/language.py',
   'templates/lockdown.py',
   'templates/notification.py',
   'templates/print.py',
@@ -137,7 +139,9 @@ template_files = [
   'templates/screencast.py',
   'templates/screenshot.py',
   'templates/settings.py',
+  'templates/spokenlanguage.py',
   'templates/usb.py',
+  'templates/vision.py',
   'templates/wallpaper.py',
   'templates/xdp_utils.py',
 ]
@@ -164,6 +168,7 @@ foreach testname, params : tests
     ],
     env: pytest_env,
     suite: ['integration'],
+    is_parallel: params.get('is_parallel', true),
     timeout: params.get('timeout', 200),
   )
 endforeach
