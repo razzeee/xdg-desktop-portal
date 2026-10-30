@@ -420,6 +420,74 @@ handle_language_get_reasoning_capabilities (XdpDbusLanguage       *object,
 }
 
 static gboolean
+handle_language_measure_request (XdpDbusLanguage       *object,
+                                 GDBusMethodInvocation *invocation,
+                                 GUnixFDList           *fd_list,
+                                 const char            *arg_session_handle,
+                                 const char            *arg_input_json,
+                                 GVariant              *arg_media_fds,
+                                 gboolean               arg_guided,
+                                 GVariant              *arg_fields,
+                                 GVariant              *arg_tools,
+                                 GVariant              *arg_options)
+{
+  Language *language = (Language *) object;
+  XdpAppInfo *app_info = xdp_invocation_get_app_info (invocation);
+  g_autoptr(ModelSession) session = NULL;
+  g_autoptr(ModelRequest) request = NULL;
+  g_autoptr(GVariant) options = NULL;
+  g_autoptr(GVariant) sealed_media_fds = NULL;
+  g_autoptr(GUnixFDList) sealed_fd_list = NULL;
+  g_autoptr(GPtrArray) sealed_fds = NULL;
+  g_autoptr(GError) error = NULL;
+  DexFuture *call_future;
+
+  session = model_session_lookup (language->sessions, invocation, arg_session_handle);
+  if (session == NULL)
+    return G_DBUS_METHOD_INVOCATION_HANDLED;
+  if (!model_session_ensure_use_case (invocation, session, "MeasureRequest",
+                                     language_generation_use_cases))
+    return G_DBUS_METHOD_INVOCATION_HANDLED;
+  if (!arg_guided && (g_variant_n_children (arg_fields) != 0 ||
+                     g_variant_n_children (arg_tools) != 0))
+    {
+      g_dbus_method_invocation_return_error_literal (invocation, G_DBUS_ERROR,
+                                                     G_DBUS_ERROR_INVALID_ARGS,
+                                                     "fields and tools require guided=true");
+      return G_DBUS_METHOD_INVOCATION_HANDLED;
+    }
+  options = model_generation_options_from_vardict (arg_options, arg_guided, &error);
+  if (options == NULL ||
+      !model_seal_fds (arg_media_fds, fd_list, &sealed_media_fds,
+                       &sealed_fd_list, &sealed_fds, &error))
+    {
+      g_dbus_method_invocation_return_gerror (invocation, error);
+      return G_DBUS_METHOD_INVOCATION_HANDLED;
+    }
+  request = model_request_new (language->context, app_info,
+                               G_DBUS_INTERFACE_SKELETON (language),
+                               G_DBUS_PROXY (language->impl),
+                               model_session_get_session (session), arg_options, &error);
+  if (request == NULL)
+    {
+      g_dbus_method_invocation_return_gerror (invocation, error);
+      return G_DBUS_METHOD_INVOCATION_HANDLED;
+    }
+  model_request_connect_loading (request);
+  connect_generation_signals (request, options);
+  call_future = xdp_dbus_impl_language_call_measure_request_future (
+    language->impl, model_request_get_handle (request),
+    model_request_get_session_handle (request), arg_input_json,
+    sealed_media_fds, arg_guided, arg_fields, arg_tools, options, sealed_fd_list);
+  model_request_take_sealed_fds (request, g_steal_pointer (&sealed_fds),
+                                 g_steal_pointer (&sealed_fd_list));
+  xdp_dbus_language_complete_measure_request (object, invocation, NULL,
+                                              model_request_get_handle (request));
+  model_request_finish (request, call_future, TRUE);
+  return G_DBUS_METHOD_INVOCATION_HANDLED;
+}
+
+static gboolean
 handle_language_stream_response (XdpDbusLanguage       *object,
                                  GDBusMethodInvocation *invocation,
                                  GUnixFDList           *fd_list,
@@ -776,6 +844,7 @@ language_iface_init (XdpDbusLanguageIface *iface)
   iface->handle_create_session = handle_language_create_session;
   iface->handle_prewarm = handle_language_prewarm;
   iface->handle_get_reasoning_capabilities = handle_language_get_reasoning_capabilities;
+  iface->handle_measure_request = handle_language_measure_request;
   iface->handle_stream_response = handle_language_stream_response;
   iface->handle_stream_respond_guided = handle_language_stream_respond_guided;
   iface->handle_stream_submit_tool_results_guided = handle_language_stream_submit_tool_results_guided;

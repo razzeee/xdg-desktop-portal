@@ -427,15 +427,24 @@ model_generation_options_from_vardict (GVariant  *options,
     { "thinking", G_VARIANT_TYPE_STRING, NULL },
     { "reasoning_effort", G_VARIANT_TYPE_STRING, NULL },
     { "include_reasoning", G_VARIANT_TYPE_BOOLEAN, NULL },
+    { "response_schema", G_VARIANT_TYPE_STRING, NULL },
   };
   g_autoptr(GVariant) filtered = NULL;
   g_auto(GVariantDict) values = G_VARIANT_DICT_INIT (NULL);
   const char *thinking = NULL;
   const char *effort = NULL;
+  const char *response_schema = NULL;
 
   filtered = filter_options (options, allowed, G_N_ELEMENTS (allowed), error);
   if (filtered == NULL)
     return NULL;
+
+  if (g_variant_lookup (filtered, "response_schema", "&s", &response_schema) && !guided)
+    {
+      g_set_error_literal (error, G_DBUS_ERROR, G_DBUS_ERROR_NOT_SUPPORTED,
+                           "response_schema requires guided generation");
+      return NULL;
+    }
 
   g_variant_lookup (filtered, "thinking", "&s", &thinking);
   g_variant_lookup (filtered, "reasoning_effort", "&s", &effort);

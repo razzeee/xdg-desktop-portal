@@ -21,6 +21,40 @@
   -->
   <interface name="org.freedesktop.impl.portal.Language">
     <!--
+        MeasureRequest:
+        @handle: Frontend-owned request handle
+        @session_handle: Session owned by the requesting application
+        @input_json: Input for the selected generation method
+        @media_fds: Sealed request-scoped media descriptors
+        @guided: Select initial guided generation rather than ordinary generation
+        @fields: Guided fields, empty when not guided or response_schema is supplied
+        @tools: Tool definitions, empty when not guided
+        @options: Generation options, including response_schema
+
+        Uses the public MeasureRequest semantics.
+        Emit GenerationCompleted with input_tokens, context_window_tokens,
+        requested_output_tokens (all int64), and measurement_kind (string)
+        before completing the method. Do not emit generated content or mutate
+        conversation history. Cancellation uses the existing Request interface.
+        Both guided methods also support response_schema;
+        constraints and validation are specified by the public Language interface.
+    -->
+    <method name="MeasureRequest">
+      <annotation name="org.gtk.GDBus.C.UnixFD" value="true"/>
+      <arg type="o" name="handle" direction="in"/>
+      <arg type="o" name="session_handle" direction="in"/>
+      <arg type="s" name="input_json" direction="in"/>
+      <annotation name="org.qtproject.QtDBus.QtTypeName.In3" value="QList&lt;QDBusUnixFileDescriptor&gt;"/>
+      <arg type="ah" name="media_fds" direction="in"/>
+      <arg type="b" name="guided" direction="in"/>
+      <annotation name="org.qtproject.QtDBus.QtTypeName.In5" value="QList&lt;std::tuple&lt;QString,QString,QString,bool&gt;&gt;"/>
+      <arg type="a(sssb)" name="fields" direction="in"/>
+      <annotation name="org.qtproject.QtDBus.QtTypeName.In6" value="QList&lt;std::tuple&lt;QString,QString,QString&gt;&gt;"/>
+      <arg type="a(sss)" name="tools" direction="in"/>
+      <annotation name="org.qtproject.QtDBus.QtTypeName.In7" value="QVariantMap"/>
+      <arg type="a{sv}" name="options" direction="in"/>
+    </method>
+    <!--
         GetReasoningCapabilities:
         @handle: Request handle owned by the frontend
         @session_handle: Language generation session handle returned by CreateSession

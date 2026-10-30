@@ -385,6 +385,86 @@ class TestModelPortals:
         assert xdp.get_mock_iface(dbus_con).GetMethodCalls("StreamResponse") == []
         _close_session(session)
 
+    @pytest.mark.parametrize(
+        "template_params", [{"language": {"delay": 10, "reply-delay": 1}}]
+    )
+    def test_language_measurement_and_schema_options(self, portals, dbus_con):
+        interface, session, _, _ = _create_session(
+            dbus_con, "Language", "language.analyze"
+        )
+        schema = '{"type":"object","properties":{"category":{"type":"string","enum":["work","personal"]}}}'
+        options = {
+            "response_schema": dbus.String(schema, variant_level=1),
+            "maximum_response_tokens": dbus.Int64(128, variant_level=1),
+        }
+        args = {
+            "session_handle": session.handle,
+            "input_json": "Classify this message",
+            "media_fds": dbus.Array([], signature="h"),
+            "guided": True,
+            "fields": dbus.Array([], signature="(sssb)"),
+            "tools": dbus.Array([], signature="(sss)"),
+            "options": options.copy(),
+        }
+        with _record_signals(
+            dbus_con, "Language", ("TokenReceived", "GuidedSnapshotReceived")
+        ) as signals:
+            response = xdp.Request(dbus_con, interface).call("MeasureRequest", **args)
+            assert response is not None
+            assert response.response == 0
+            assert _plain(response.results) == {
+                "input_tokens": 42,
+                "context_window_tokens": 4096,
+                "requested_output_tokens": 128,
+                "measurement_kind": "exact",
+            }
+            assert signals["TokenReceived"] == []
+            assert signals["GuidedSnapshotReceived"] == []
+        backend = _backend_args(xdp.get_mock_iface(dbus_con), "MeasureRequest")
+        assert backend[7]["response_schema"] == schema
+        other = _new_bus()
+        try:
+            args["options"] = options.copy()
+            with _expect_dbus_error(ACCESS_DENIED):
+                xdp.Request(other, xdp.get_portal_iface(other, "Language")).call(
+                    "MeasureRequest", **args
+                )
+        finally:
+            other.close()
+        response = xdp.Request(dbus_con, interface).call(
+            "StreamRespondGuided",
+            session_handle=session.handle,
+            prompt="Classify this message",
+            media_fds=dbus.Array([], signature="h"),
+            fields=dbus.Array([], signature="(sssb)"),
+            tools=dbus.Array([], signature="(sss)"),
+            options=options.copy(),
+        )
+        assert response is not None
+        assert response.response == 0
+        backend = _backend_args(xdp.get_mock_iface(dbus_con), "StreamRespondGuided")
+        assert backend[6]["response_schema"] == schema
+        _close_session(session)
+
+    def test_language_rejects_schema_for_unguided_measurement(self, portals, dbus_con):
+        interface, session, _, _ = _create_session(
+            dbus_con, "Language", "language.analyze"
+        )
+        with _expect_dbus_error("org.freedesktop.DBus.Error.NotSupported"):
+            xdp.Request(dbus_con, interface).call(
+                "MeasureRequest",
+                session_handle=session.handle,
+                input_json="hello",
+                media_fds=dbus.Array([], signature="h"),
+                guided=False,
+                fields=dbus.Array([], signature="(sssb)"),
+                tools=dbus.Array([], signature="(sss)"),
+                options={"response_schema": dbus.String("{}", variant_level=1)},
+            )
+        mock = xdp.get_mock_iface(dbus_con)
+        assert mock.GetMethodCalls("MeasureRequest") == []
+        _close_session(session)
+
     def test_versions_and_depth_introspection(self, portals, dbus_con):
         for portal in ("Language", "SpokenLanguage", "Vision"):
             xdp.check_version(dbus_con, portal, 1)
@@ -1240,7 +1320,8 @@ class TestModelPortals:
             },
         ),
     )
-    def test_request_close_cancels_fd_stream(self, portals, dbus_con):
+    @pytest.mark.parametrize("method", ("StreamResponse", "MeasureRequest"))
+    def test_request_close_cancels_fd_stream(self, portals, dbus_con, method):
         interface, session, _, _ = _create_session(
             dbus_con, "Language", "language.summarize"
         )
@@ -1251,25 +1332,29 @@ class TestModelPortals:
         )
         media = b"retained immutable media"
         fd = _new_memfd("cancelled-language-media", media)
+        args = {
+            "session_handle": session.handle,
+            "input_json": '[{"type":"input_text","text":"cancel"}]',
+            "media_fds": dbus.Array([dbus.types.UnixFd(fd)], signature="h"),
+        }
+        if method == "MeasureRequest":
+            args.update(
+                guided=False,
+                fields=dbus.Array([], signature="(sssb)"),
+                tools=dbus.Array([], signature="(sss)"),
+            )
+        args["options"] = {}
 
         try:
             request = xdp.Request(dbus_con, interface)
-            with _close_when(
-                request, lambda: _backend_called(mock_intf, "StreamResponse")
-            ):
-                response = request.call(
-                    "StreamResponse",
-                    session_handle=session.handle,
-                    input_json='[{"type":"input_text","text":"cancel"}]',
-                    media_fds=dbus.Array([dbus.types.UnixFd(fd)], signature="h"),
-                    options={},
-                )
+            with _close_when(request, lambda: _backend_called(mock_intf, method)):
+                response = request.call(method, **args)
         finally:
             os.close(fd)
 
         assert response is None
         assert request.closed
-        args = _backend_args(mock_intf, "StreamResponse")
+        args = _backend_args(mock_intf, method)
         _assert_sealed_fd(args[3][0], media)
         assert [str(path) for path in impl.GetClosedRequests()] == [request.handle]
         _close_session(session)

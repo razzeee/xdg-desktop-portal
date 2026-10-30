@@ -418,3 +418,50 @@ def StreamEmbed(
             ),
         ),
     )
+
+
+@dbus.service.method(
+    MAIN_IFACE,
+    in_signature="oosahba(sssb)a(sss)a{sv}",
+    out_signature="",
+    async_callbacks=("cb_success", "cb_error"),
+)
+def MeasureRequest(
+    self,
+    handle,
+    session_handle,
+    input_json,
+    media_fds,
+    guided,
+    fields,
+    tools,
+    options,
+    cb_success,
+    cb_error,
+):
+    assert session_handle in self.language_sessions
+    _complete_request(self, _new_request(self, handle, cb_success, cb_error))
+    _schedule_signals(
+        self,
+        handle,
+        session_handle,
+        (
+            (
+                "GenerationCompleted",
+                "a{sv}",
+                (
+                    dbus.Dictionary(
+                        {
+                            "input_tokens": dbus.Int64(42),
+                            "context_window_tokens": dbus.Int64(4096),
+                            "requested_output_tokens": dbus.Int64(
+                                options.get("maximum_response_tokens", 512)
+                            ),
+                            "measurement_kind": dbus.String("exact"),
+                        },
+                        signature="sv",
+                    ),
+                ),
+            ),
+        ),
+    )
