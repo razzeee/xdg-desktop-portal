@@ -12,6 +12,14 @@
 #include "xdp-impl-dbus.h"
 #include "xdp-utils.h"
 
+enum
+{
+  REQUEST_CLOSED,
+  N_SIGNALS,
+};
+
+static guint signals[N_SIGNALS] = { 0 };
+
 typedef struct _XdpRequestDex
 {
   XdpDbusRequestSkeleton parent_instance;
@@ -19,10 +27,11 @@ typedef struct _XdpRequestDex
   XdpContext *context;
   XdpAppInfo *app_info;
   XdpDbusImplRequest *impl_request;
-  GDBusInterfaceSkeleton *skeleton;
+  GDBusConnection *connection;
   XdpObjectPathClaim *claim;
   gboolean exported;
   gboolean responded;
+  gboolean closed_emitted;
 } XdpRequestDex;
 
 static void xdp_request_skeleton_iface_init (XdpDbusRequestIface *iface);
@@ -34,18 +43,46 @@ G_DEFINE_FINAL_TYPE_WITH_CODE (XdpRequestDex,
                                                       xdp_request_skeleton_iface_init))
 
 static void
+xdp_request_dex_unexport (XdpRequestDex *request)
+{
+  if (request->exported)
+    {
+      g_dbus_interface_skeleton_unexport (G_DBUS_INTERFACE_SKELETON (request));
+      request->exported = FALSE;
+    }
+
+  if (!request->closed_emitted)
+    {
+      request->closed_emitted = TRUE;
+      g_signal_emit (request, signals[REQUEST_CLOSED], 0);
+    }
+}
+
+void
+xdp_request_dex_close (XdpRequestDex *request)
+{
+  g_autoptr(XdpRequestDex) hold = NULL;
+
+  g_return_if_fail (XDP_IS_REQUEST_DEX (request));
+
+  if (!request->exported)
+    return;
+
+  hold = g_object_ref (request);
+  xdp_request_dex_unexport (request);
+  xdp_dbus_impl_request_call_close (request->impl_request, NULL, NULL, NULL);
+}
+
+static void
 xdp_request_dex_on_signal_response (XdpDbusRequest *object,
                                     guint           arg_response,
                                     GVariant       *arg_results)
 {
   XdpRequestDex *request = XDP_REQUEST_DEX (object);
-  GDBusConnection *connection;
-
-  connection = g_dbus_interface_skeleton_get_connection (request->skeleton);
-  if (!connection)
+  if (!request->connection)
     return;
 
-  g_dbus_connection_emit_signal (connection,
+  g_dbus_connection_emit_signal (request->connection,
                                  xdp_app_info_get_sender (request->app_info),
                                  xdp_request_dex_get_object_path (request),
                                  DESKTOP_DBUS_IFACE ".Request",
@@ -60,7 +97,7 @@ static gboolean
 xdp_request_dex_handle_close (XdpDbusRequest        *object,
                               GDBusMethodInvocation *invocation)
 {
-  XdpRequestDex *request = XDP_REQUEST_DEX (object);
+  g_autoptr(XdpRequestDex) request = g_object_ref (XDP_REQUEST_DEX (object));
   g_autoptr(GError) error = NULL;
 
   if (!request->exported)
@@ -69,8 +106,7 @@ xdp_request_dex_handle_close (XdpDbusRequest        *object,
       return G_DBUS_METHOD_INVOCATION_HANDLED;
     }
 
-  g_dbus_interface_skeleton_unexport (G_DBUS_INTERFACE_SKELETON (request));
-  request->exported = FALSE;
+  xdp_request_dex_unexport (request);
 
   dex_await (xdp_dbus_impl_request_call_close_future (request->impl_request),
              &error);
@@ -105,14 +141,13 @@ xdp_request_dex_dispose (GObject *object)
 
       xdp_dbus_impl_request_call_close (request->impl_request, NULL, NULL, NULL);
 
-      g_dbus_interface_skeleton_unexport (G_DBUS_INTERFACE_SKELETON (request));
-      request->exported = FALSE;
+      xdp_request_dex_unexport (request);
     }
 
   g_clear_pointer (&request->claim, xdp_object_path_claim_unref);
   g_clear_object (&request->app_info);
   g_clear_object (&request->impl_request);
-  g_clear_object (&request->skeleton);
+  g_clear_object (&request->connection);
 
   G_OBJECT_CLASS (xdp_request_dex_parent_class)->dispose (object);
 }
@@ -128,6 +163,13 @@ xdp_request_dex_class_init (XdpRequestDexClass *klass)
   GObjectClass *object_class = G_OBJECT_CLASS (klass);
 
   object_class->dispose = xdp_request_dex_dispose;
+
+  signals[REQUEST_CLOSED] =
+    g_signal_new ("request-closed",
+                  G_TYPE_FROM_CLASS (object_class),
+                  G_SIGNAL_RUN_LAST,
+                  0, NULL, NULL, NULL,
+                  G_TYPE_NONE, 0);
 }
 
 static gboolean
@@ -154,7 +196,7 @@ request_authorize_callback (GDBusInterfaceSkeleton *interface,
 typedef struct _RequestImplProxyCreateData {
   XdpContext *context;
   XdpAppInfo *app_info;
-  GDBusInterfaceSkeleton *skeleton;
+  GDBusConnection *connection;
   XdpObjectPathClaim *claim;
 } RequestImplProxyCreateData;
 
@@ -163,7 +205,7 @@ request_impl_proxy_create_data_free (RequestImplProxyCreateData *data)
 {
   g_clear_pointer (&data->claim, xdp_object_path_claim_unref);
   g_clear_object (&data->app_info);
-  g_clear_object (&data->skeleton);
+  g_clear_object (&data->connection);
   free (data);
 }
 
@@ -177,13 +219,7 @@ on_app_info_removed (XdpAppInfoRegistry *registry,
   if (app_info != request->app_info)
     return;
 
-  if (!request->exported)
-    return;
-
-  xdp_dbus_impl_request_call_close (request->impl_request, NULL, NULL, NULL);
-
-  g_dbus_interface_skeleton_unexport (G_DBUS_INTERFACE_SKELETON (request));
-  request->exported = FALSE;
+  xdp_request_dex_close (request);
 }
 
 static DexFuture *
@@ -203,7 +239,7 @@ on_impl_request_proxy_created (DexFuture *future,
   request->context = data->context;
   request->app_info = g_steal_pointer (&data->app_info);
   request->impl_request = g_steal_pointer (&impl_request);
-  request->skeleton = g_steal_pointer (&data->skeleton);
+  request->connection = g_steal_pointer (&data->connection);
   request->claim = g_steal_pointer (&data->claim);
   g_signal_connect_object (registry, "removed",
                            G_CALLBACK (on_app_info_removed),
@@ -279,7 +315,7 @@ xdp_request_dex_new (XdpContext             *context,
   data = g_new0 (RequestImplProxyCreateData, 1);
   data->context = context;
   data->app_info = g_object_ref (app_info);
-  data->skeleton = g_object_ref (skeleton);
+  data->connection = g_object_ref (g_dbus_interface_skeleton_get_connection (skeleton));
   data->claim = g_steal_pointer (&claim);
 
   future = dex_future_then (future,
@@ -297,7 +333,7 @@ xdp_request_dex_export (XdpRequestDex  *request,
   const char *path = xdp_request_dex_get_object_path (request);
 
   if (!g_dbus_interface_skeleton_export (G_DBUS_INTERFACE_SKELETON (request),
-                                         g_dbus_interface_skeleton_get_connection (request->skeleton),
+                                         request->connection,
                                          path,
                                          error))
     return FALSE;
@@ -316,7 +352,7 @@ xdp_request_dex_emit_response (XdpRequestDex                *request,
   if (!request->exported)
     return;
 
-  if (!g_dbus_interface_skeleton_get_connection (request->skeleton))
+  if (!request->connection)
     return;
 
   if (!results)
@@ -332,6 +368,7 @@ xdp_request_dex_emit_response (XdpRequestDex                *request,
   xdp_dbus_request_emit_response (XDP_DBUS_REQUEST (request),
                                   response,
                                   results);
+  xdp_request_dex_unexport (request);
 }
 
 const char *

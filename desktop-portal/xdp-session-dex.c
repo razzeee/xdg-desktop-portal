@@ -27,9 +27,10 @@ typedef struct _XdpSessionDex
   XdpContext *context;
   XdpAppInfo *app_info;
   XdpDbusImplSession *impl_session;
-  GDBusInterfaceSkeleton *skeleton;
+  GDBusConnection *connection;
   XdpObjectPathClaim *claim;
   gboolean exported;
+  gboolean closed_emitted;
 } XdpSessionDex;
 
 static void xdp_session_skeleton_iface_init (XdpDbusSessionIface *iface);
@@ -43,7 +44,35 @@ G_DEFINE_FINAL_TYPE_WITH_CODE (XdpSessionDex,
 static void
 xdp_session_dex_emit_closed (XdpSessionDex *session)
 {
+  if (session->closed_emitted)
+    return;
+
+  session->closed_emitted = TRUE;
   g_signal_emit (session, signals[SESSION_CLOSED], 0);
+}
+
+static gboolean
+xdp_session_dex_close_local (XdpSessionDex *session)
+{
+  if (!session->exported)
+    return FALSE;
+
+  g_dbus_interface_skeleton_unexport (G_DBUS_INTERFACE_SKELETON (session));
+  session->exported = FALSE;
+  xdp_session_dex_emit_closed (session);
+  return TRUE;
+}
+
+void
+xdp_session_dex_close (XdpSessionDex *session)
+{
+  g_autoptr(XdpSessionDex) hold = NULL;
+
+  g_return_if_fail (XDP_IS_SESSION_DEX (session));
+
+  hold = g_object_ref (session);
+  if (xdp_session_dex_close_local (session))
+    xdp_dbus_impl_session_call_close (session->impl_session, NULL, NULL, NULL);
 }
 
 static void
@@ -51,13 +80,10 @@ xdp_session_dex_on_signal_closed (XdpDbusSession *object,
                                   GVariant       *arg_details)
 {
   XdpSessionDex *session = XDP_SESSION_DEX (object);
-  GDBusConnection *connection;
-
-  connection = g_dbus_interface_skeleton_get_connection (session->skeleton);
-  if (!connection)
+  if (!session->connection)
     return;
 
-  g_dbus_connection_emit_signal (connection,
+  g_dbus_connection_emit_signal (session->connection,
                                  xdp_app_info_get_sender (session->app_info),
                                  xdp_session_dex_get_object_path (session),
                                  DESKTOP_DBUS_IFACE ".Session",
@@ -70,22 +96,17 @@ static gboolean
 xdp_session_dex_handle_close (XdpDbusSession        *object,
                               GDBusMethodInvocation *invocation)
 {
-  XdpSessionDex *session = XDP_SESSION_DEX (object);
+  g_autoptr(XdpSessionDex) session = g_object_ref (XDP_SESSION_DEX (object));
   g_autoptr(GError) error = NULL;
 
-  if (!session->exported)
+  if (!xdp_session_dex_close_local (session))
     {
       xdp_dbus_session_complete_close (XDP_DBUS_SESSION (session), invocation);
       return G_DBUS_METHOD_INVOCATION_HANDLED;
     }
 
-  g_dbus_interface_skeleton_unexport (G_DBUS_INTERFACE_SKELETON (session));
-  session->exported = FALSE;
-
   dex_await (xdp_dbus_impl_session_call_close_future (session->impl_session),
              &error);
-
-  xdp_session_dex_emit_closed (session);
 
   if (error)
     {
@@ -120,7 +141,7 @@ xdp_session_dex_dispose (GObject *object)
   g_clear_pointer (&session->claim, xdp_object_path_claim_unref);
   g_clear_object (&session->app_info);
   g_clear_object (&session->impl_session);
-  g_clear_object (&session->skeleton);
+  g_clear_object (&session->connection);
 
   G_OBJECT_CLASS (xdp_session_dex_parent_class)->dispose (object);
 }
@@ -155,21 +176,14 @@ on_app_info_removed (XdpAppInfoRegistry *registry,
   if (app_info != session->app_info)
     return;
 
-  if (!session->exported)
-    return;
-
-  g_dbus_interface_skeleton_unexport (G_DBUS_INTERFACE_SKELETON (session));
-  session->exported = FALSE;
-
-  xdp_dbus_impl_session_call_close (session->impl_session, NULL, NULL, NULL);
-  xdp_session_dex_emit_closed (session);
+  xdp_session_dex_close (session);
 }
 
 static void
 on_impl_closed (XdpDbusImplSession *object,
                 gpointer            user_data)
 {
-  XdpSessionDex *session = XDP_SESSION_DEX (user_data);
+  g_autoptr(XdpSessionDex) session = g_object_ref (XDP_SESSION_DEX (user_data));
   g_auto(GVariantBuilder) details_builder =
     G_VARIANT_BUILDER_INIT (G_VARIANT_TYPE_VARDICT);
 
@@ -179,10 +193,7 @@ on_impl_closed (XdpDbusImplSession *object,
   xdp_dbus_session_emit_closed (XDP_DBUS_SESSION (session),
                                 g_variant_builder_end (&details_builder));
 
-  g_dbus_interface_skeleton_unexport (G_DBUS_INTERFACE_SKELETON (session));
-  session->exported = FALSE;
-
-  xdp_session_dex_emit_closed (session);
+  xdp_session_dex_close_local (session);
 }
 
 static gboolean
@@ -208,7 +219,7 @@ session_authorize_callback (GDBusInterfaceSkeleton *interface,
 typedef struct _SessionImplProxyCreateData {
   XdpContext *context;
   XdpAppInfo *app_info;
-  GDBusInterfaceSkeleton *skeleton;
+  GDBusConnection *connection;
   XdpObjectPathClaim *claim;
 } SessionImplProxyCreateData;
 
@@ -217,7 +228,7 @@ session_impl_proxy_create_data_free (SessionImplProxyCreateData *data)
 {
   g_clear_pointer (&data->claim, xdp_object_path_claim_unref);
   g_clear_object (&data->app_info);
-  g_clear_object (&data->skeleton);
+  g_clear_object (&data->connection);
   free (data);
 }
 
@@ -240,7 +251,7 @@ on_impl_session_proxy_created (DexFuture *future,
   session->context = data->context;
   session->app_info = g_steal_pointer (&data->app_info);
   session->impl_session = g_steal_pointer (&impl_session);
-  session->skeleton = g_steal_pointer (&data->skeleton);
+  session->connection = g_steal_pointer (&data->connection);
   session->claim = g_steal_pointer (&data->claim);
 
   g_signal_connect_object (registry, "removed",
@@ -269,7 +280,7 @@ on_impl_session_proxy_created (DexFuture *future,
 
   path = xdp_session_dex_get_object_path (session);
   if (!g_dbus_interface_skeleton_export (G_DBUS_INTERFACE_SKELETON (session),
-                                         g_dbus_interface_skeleton_get_connection (session->skeleton),
+                                         session->connection,
                                          path,
                                          &error))
       return dex_future_new_for_error (g_steal_pointer (&error));
@@ -332,7 +343,7 @@ xdp_session_dex_new (XdpContext             *context,
   data = g_new0 (SessionImplProxyCreateData, 1);
   data->context = context;
   data->app_info = g_object_ref (app_info);
-  data->skeleton = g_object_ref (skeleton);
+  data->connection = g_object_ref (g_dbus_interface_skeleton_get_connection (skeleton));
   data->claim = g_steal_pointer (&claim);
 
   future = dex_future_then (future,
@@ -366,7 +377,7 @@ typedef struct _XdpSessionDexStore
   GObject parent_instance;
 
   size_t session_offset;
-  GHashTable *sessions; /* char *session_handle -> XdpSessionDex *session */
+  GHashTable *sessions; /* char *session_handle -> GObject *session_wrapper */
 } XdpSessionDexStore;
 
 G_DEFINE_FINAL_TYPE (XdpSessionDexStore,
@@ -379,6 +390,9 @@ on_session_closed (XdpSessionDex *session,
 {
   XdpSessionDexStore *store = XDP_SESSION_DEX_STORE (user_data);
 
+  if (store->sessions == NULL)
+    return;
+
   g_hash_table_remove (store->sessions,
                        xdp_session_dex_get_object_path (session));
 }
@@ -390,8 +404,9 @@ xdp_session_dex_store_take_session (XdpSessionDexStore *store,
   g_autoptr(GObject) owned_wrapper = G_OBJECT (session_wrapper);
   XdpSessionDex *session;
 
-  session = XDP_SESSION_DEX (G_STRUCT_MEMBER_P (owned_wrapper,
-                                                store->session_offset));
+  session = store->session_offset == G_MAXSIZE
+              ? XDP_SESSION_DEX (owned_wrapper)
+              : G_STRUCT_MEMBER (XdpSessionDex *, owned_wrapper, store->session_offset);
 
   if (!session || xdp_session_dex_is_closed (session))
     return;
@@ -418,8 +433,9 @@ xdp_session_dex_store_lookup_session (XdpSessionDexStore *store,
   if (!session_wrapper)
     return NULL;
 
-  session = XDP_SESSION_DEX (G_STRUCT_MEMBER_P (session_wrapper,
-                                                store->session_offset));
+  session = store->session_offset == G_MAXSIZE
+              ? XDP_SESSION_DEX (session_wrapper)
+              : G_STRUCT_MEMBER (XdpSessionDex *, session_wrapper, store->session_offset);
 
   if (app_info && xdp_session_dex_get_app_info (session) != app_info)
     return NULL;
@@ -453,7 +469,7 @@ xdp_session_dex_store_class_init (XdpSessionDexStoreClass *klass)
 XdpSessionDexStore *
 xdp_session_dex_store_new (void)
 {
-  return xdp_session_dex_store_new_with_offset (0);
+  return xdp_session_dex_store_new_with_offset (G_MAXSIZE);
 }
 
 XdpSessionDexStore *
