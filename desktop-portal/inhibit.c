@@ -61,10 +61,13 @@ inhibit_done (GObject *source,
 {
   XdpDbusImplInhibit *impl = (XdpDbusImplInhibit *) source;
   g_autoptr(GError) error = NULL;
-  XdpRequest *request = data;
+  g_autoptr(XdpRequest) request = data;
+  g_autoptr(XdpDbusImplRequest) impl_request = NULL;
   int response = 0;
 
   REQUEST_AUTOLOCK (request);
+
+  impl_request = g_object_steal_data (G_OBJECT (request), "impl-request");
 
   if (!xdp_dbus_impl_inhibit_call_inhibit_finish (impl, result, &error))
     {
@@ -72,6 +75,10 @@ inhibit_done (GObject *source,
       g_warning ("A backend call failed: %s", error->message);
       response = 2;
     }
+  else if (request->exported)
+    xdp_request_set_impl_request (request, impl_request);
+  else
+    xdp_dbus_impl_request_call_close (impl_request, NULL, NULL, NULL);
 
   if (request->exported)
     {
@@ -135,6 +142,9 @@ handle_inhibit_in_thread_func (GTask *task,
   const char *app_id;
 
   REQUEST_AUTOLOCK (request);
+
+  if (!request->exported)
+    return;
 
   window = (const char *)g_object_get_data (G_OBJECT (request), "window");
   flags = GPOINTER_TO_UINT (g_object_get_data (G_OBJECT (request), "flags"));
@@ -229,7 +239,10 @@ handle_inhibit (XdpDbusInhibit *object,
       return G_DBUS_METHOD_INVOCATION_HANDLED;
     }
 
-  xdp_request_set_impl_request (request, impl_request);
+  /* Close may arrive before the backend exports its request. Only forward it
+   * once Inhibit has completed; inhibit_done also handles an earlier Close. */
+  g_object_set_data_full (G_OBJECT (request), "impl-request",
+                          g_steal_pointer (&impl_request), g_object_unref);
   xdp_request_export (request, g_dbus_method_invocation_get_connection (invocation));
 
   task = g_task_new (inhibit, NULL, NULL, NULL);

@@ -34,6 +34,7 @@ class InhibitParameters:
     delay: int
     response: int
     expect_close: bool
+    defer_inhibit: bool
 
 
 def load(mock, parameters=None):
@@ -46,6 +47,7 @@ def load(mock, parameters=None):
         delay=parameters.get("delay", 200),
         response=parameters.get("response", 0),
         expect_close=parameters.get("expect-close", False),
+        defer_inhibit=parameters.get("defer-inhibit", False),
     )
 
     mock.AddProperties(
@@ -58,6 +60,7 @@ def load(mock, parameters=None):
     )
     mock.sessions: dict[str, ImplSession] = {}
     mock.session_timers = {}
+    mock.pending_inhibits = {}
 
 
 @dbus.service.method(
@@ -70,19 +73,27 @@ def Inhibit(self, handle, app_id, window, flags, options, cb_success, cb_error):
     logger.debug(f"Inhibit({handle}, {app_id}, {window}, {flags}, {options})")
     params = self.inhibit_params
 
-    request = ImplRequest(
-        self,
-        BUS_NAME,
-        handle,
-        logger,
-        cb_success,
-        cb_error,
-    )
-
     if params.expect_close:
-        request.wait_for_close()
+
+        def create_inhibitor():
+            request = ImplRequest(
+                self, BUS_NAME, handle, logger, lambda *args: None, cb_error
+            )
+            request.wait_for_close()
+            cb_success()
+
+        if params.defer_inhibit:
+            self.pending_inhibits[handle] = create_inhibitor
+        else:
+            create_inhibitor()
     else:
+        request = ImplRequest(self, BUS_NAME, handle, logger, cb_success, cb_error)
         request.respond(Response(params.response, {}), delay=params.delay)
+
+
+@dbus.service.method(MOCK_IFACE, in_signature="o", out_signature="")
+def FinishInhibit(self, handle):
+    self.pending_inhibits.pop(handle)()
 
 
 @dbus.service.method(

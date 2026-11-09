@@ -134,7 +134,6 @@ class TestInhibit:
         flags = InhibitFlags.ALL
 
         request = xdp.Request(dbus_con, inhibit_intf)
-        request.schedule_close(1000)
         options = {
             "reason": reason,
         }
@@ -144,6 +143,9 @@ class TestInhibit:
             flags=flags.value,
             options=options,
         )
+
+        request.close()
+        xdp.wait_for(lambda: request.closed)
 
         # Only true if the impl.Request was closed too
         assert request.closed
@@ -156,6 +158,28 @@ class TestInhibit:
         assert args[2] == ""  # parent window
         assert args[3] == flags.value
         assert args[4]["reason"] == reason
+
+    @pytest.mark.parametrize(
+        "template_params",
+        ({"inhibit": {"expect-close": True, "defer-inhibit": True}},),
+    )
+    def test_close_before_backend_request(self, portals, dbus_con):
+        inhibit_intf = xdp.get_portal_iface(dbus_con, "Inhibit")
+        mock_intf = xdp.get_mock_iface(dbus_con)
+        request = xdp.Request(dbus_con, inhibit_intf)
+
+        handle = inhibit_intf.Inhibit(
+            "",
+            InhibitFlags.ALL.value,
+            {"handle_token": request.handle_token},
+        )
+        assert handle == request.handle
+        xdp.wait_for(lambda: len(mock_intf.GetMethodCalls("Inhibit")) == 1)
+
+        request.close()
+        mock_intf.FinishInhibit(handle)
+        xdp.wait_for(lambda: request.closed)
+        assert request.response is None
 
     def test_permission(self, portals, dbus_con, xdp_app_info):
         app_id = xdp_app_info.app_id
